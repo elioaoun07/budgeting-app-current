@@ -1,6 +1,8 @@
 import { GoogleSpreadsheet } from 'google-spreadsheet';
 import creds from '$lib/credentials.json';
-import { SPREADSHEET_ID } from '$env/static/private';
+//import { SPREADSHEET_ID } from '$env/static/private';
+
+const SPREADSHEET_ID = '1CEUjttL4pz414ZjfCHzERR_FlTUIDnOwOiGV_Dk65Xg';
 
 const SCHEDULED_TAB = 'Scheduled Payments';
 
