@@ -1,10 +1,9 @@
 // svelte.config.js
-const adapter = require('@sveltejs/adapter-vercel');
-const preprocess = require('svelte-preprocess');
+import adapter from '@sveltejs/adapter-vercel';
+import preprocess from 'svelte-preprocess';
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
-  // run svelte-preprocess on <style lang="scss">, PostCSS, etc.
   preprocess: preprocess(),
 
   kit: {
@@ -12,4 +11,4 @@ const config = {
   }
 };
 
-module.exports = config;
+export default config;
