@@ -1,12 +1,12 @@
-const adapter = require('@sveltejs/adapter-auto');
-const { vitePreprocess } = require('@sveltejs/kit/vite');
+// svelte.config.cjs
+const adapter = require('@sveltejs/adapter-vercel');
+const sveltePreprocess = require('svelte-preprocess');
 
 /** @type {import('@sveltejs/kit').Config} */
-const config = {
-	preprocess: vitePreprocess(),
-	kit: {
-		adapter: adapter()
-	}
-};
+module.exports = {
+  preprocess: sveltePreprocess(),
 
-module.exports = config;
+  kit: {
+    adapter: adapter()
+  }
+};
