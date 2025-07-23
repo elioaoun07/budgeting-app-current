@@ -1,13 +1,15 @@
 // svelte.config.js
-import vercel from '@sveltejs/adapter-vercel';
-import { vitePreprocess } from '@sveltejs/kit/vite';
+const adapter = require('@sveltejs/adapter-vercel');
+const preprocess = require('svelte-preprocess');
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
-  preprocess: vitePreprocess(),
+  // run svelte-preprocess on <style lang="scss">, PostCSS, etc.
+  preprocess: preprocess(),
+
   kit: {
-    adapter: vercel()
+    adapter: adapter()
   }
 };
 
-export default config;
+module.exports = config;
