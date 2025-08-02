@@ -1,140 +1,144 @@
 // src/lib/budgeting/store.ts
 import { writable, derived, get } from 'svelte/store';
-import { browser } from '$app/environment';
-import type { Category } from './defaults';
-import {
-  defaultCategories,
-  defaultIncomeCategories
-} from './defaults';
+import type { Category }          from './defaults';
 
-/* ═══════════════  ACCOUNTS  ═══════════════ */
-
+/** ── ACCOUNTS ─────────────────────────────────────────────── */
 export interface Account {
-  id: string;
+  id:   string;
   name: string;
   type: 'income' | 'expense';
 }
 
-function loadAccounts(): Account[] {
-  if (!browser) return [];
-  try {
-    return JSON.parse(localStorage.getItem('budgeting:accounts') ?? '[]');
-  } catch {
-    return [];
-  }
-}
-
-function persistAccounts(accs: Account[]) {
-  if (browser) {
-    localStorage.setItem('budgeting:accounts', JSON.stringify(accs));
-  }
-}
-
-export const accounts = writable<Account[]>(loadAccounts());
+export const accounts       = writable<Account[]>([]);
 export const currentAccount = writable<Account | null>(null);
 
-// restore last-active account
-const LS_ACTIVE = 'budgeting:activeAccount';
-if (browser) {
-  const saved = localStorage.getItem(LS_ACTIVE);
-  if (saved) {
-    const acct = loadAccounts().find(a => a.id === saved) ?? null;
-    currentAccount.set(acct);
+export async function loadAccounts() {
+  const res = await fetch('/budgeting/api/accounts');
+  if (!res.ok) throw new Error(await res.text());
+  const data: Account[] = await res.json();
+  accounts.set(data);
+  if (!get(currentAccount) && data.length) {
+    currentAccount.set(data[0]);
   }
 }
 
-// account helpers
-export function createAccount(name: string, type: 'income'|'expense') {
-  const acc: Account = { id: crypto.randomUUID(), name, type };
-  accounts.update(list => {
-    const upd = [...list, acc];
-    persistAccounts(upd);
-    return upd;
+export async function createAccount(
+  name: string,
+  type: 'income' | 'expense'
+) {
+  const res = await fetch('/budgeting/api/accounts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, type })
   });
+  if (!res.ok) throw new Error(await res.text());
+  const newAcc: Account = await res.json();
+  accounts.update(list => [...list, newAcc]);
+  currentAccount.set(newAcc);
+}
+
+export function selectAccount(id: string) {
+  const acc = get(accounts).find(a => a.id === id) ?? null;
   currentAccount.set(acc);
 }
-export function selectAccount(id: string) {
-  const acct = get(accounts).find(a => a.id === id) ?? null;
-  currentAccount.set(acct);
+
+/** ── CATEGORIES ───────────────────────────────────────────── */
+export const baseCategories = writable<Category[]>([]);
+
+/**
+ * Load DB categories for the selected account
+ */
+export async function loadCategories() {
+  const acc = get(currentAccount);
+  if (!acc) return;
+  const res = await fetch(
+    `/budgeting/api/categories?accountId=${encodeURIComponent(acc.id)}`
+  );
+  if (!res.ok) throw new Error(await res.text());
+  const cats: Category[] = await res.json();
+  baseCategories.set(cats);
 }
 
-/* ══════════  CATEGORY PREFERENCES  ══════════ */
+/**
+ * Create a new category in Supabase and refresh list
+ */
+export async function createCategory(
+  name: string,
+  icon: string,
+  color: string,
+  subs: string[] = []
+) {
+  const acc = get(currentAccount);
+  if (!acc) throw new Error('No account selected');
+  const res = await fetch(
+    `/budgeting/api/categories?accountId=${encodeURIComponent(acc.id)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, icon, color, subs })
+    }
+  );
+  if (!res.ok) throw new Error(await res.text());
+  const cat: Category = await res.json();
+  baseCategories.update(list => [...list, cat]);
+}
 
+/** ── USER PREFS (order / added / removed) ───────────────── */
 export interface UserPrefs {
   added:   Category[];
   removed: string[];
   order:   string[];
 }
 
-const prefsKey = (acc: Account|null) =>
-  `budgeting:categoryPrefs:${acc?.id ?? 'none'}`;
-
-function loadPrefs(acc: Account|null): UserPrefs {
-  if (!browser) return { added: [], removed: [], order: [] };
-  try {
-    return JSON.parse(
-      localStorage.getItem(prefsKey(acc)) ?? 'null'
-    ) ?? { added: [], removed: [], order: [] };
-  } catch {
-    return { added: [], removed: [], order: [] };
-  }
-}
-
-/**
- * Must be called in a component's onMount() so that
- * we only touch localStorage in the browser _after_ hydration.
- */
-export function initBudgetingStore() {
-  if (!browser) return;
-
-  // 1️⃣ load prefs for current account
-  rawPrefs.set(loadPrefs(get(currentAccount)));
-
-  // 2️⃣ reload when account switches
-  currentAccount.subscribe(acc => {
-    rawPrefs.set(loadPrefs(acc));
-  });
-
-  // 3️⃣ persist on any prefs change
-  rawPrefs.subscribe(p => {
-    localStorage.setItem(prefsKey(get(currentAccount)), JSON.stringify(p));
-  });
-}
-
 export const rawPrefs = writable<UserPrefs>({ added: [], removed: [], order: [] });
 
-/* ═══════════  MERGED CATEGORIES  ═══════════ */
+export async function loadUserPrefs() {
+  const acc = get(currentAccount);
+  if (!acc) return;
+  const res = await fetch(
+    `/budgeting/api/user/categories?accountId=${encodeURIComponent(acc.id)}`
+  );
+  if (!res.ok) throw new Error(await res.text());
+  rawPrefs.set(await res.json());
+}
 
-export const categories = derived(
-  [rawPrefs, currentAccount],
-  ([$raw, $acc], set) => {
-    const base = $acc?.type === 'income'
-      ? defaultIncomeCategories
-      : defaultCategories;
-
-    const merged = [...base, ...$raw.added]
-      .filter(c => !$raw.removed.includes(c.name))
-      .reduce<Category[]>((out, c) =>
-        out.some(o => o.name === c.name) ? out : out.concat(c),
-      [], [] as Category[]);
-
-    if ($raw.order.length) {
-      merged.sort((a,b) => {
-        const ia = $raw.order.indexOf(a.name),
-              ib = $raw.order.indexOf(b.name);
-        return (ia === -1 ? Infinity : ia) - (ib === -1 ? Infinity : ib);
-      });
+rawPrefs.subscribe(async (prefs) => {
+  const acc = get(currentAccount);
+  if (!acc) return;
+  await fetch(
+    `/budgeting/api/user/categories?accountId=${encodeURIComponent(acc.id)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(prefs)
     }
+  );
+});
 
+/** ── MERGE & DERIVE FINAL CATEGORIES ──────────────────────── */
+export const categories = derived(
+  [baseCategories, rawPrefs],
+  ([base, raw], set) => {
+    let merged = [...base, ...raw.added]
+      .filter(c => !raw.removed.includes(c.name))
+      .reduce<Category[]>((out, c) =>
+        out.find(o => o.name === c.name) ? out : [...out, c]
+      , []);
+    if (raw.order.length) {
+      merged.sort((a, b) =>
+        raw.order.indexOf(a.name) - raw.order.indexOf(b.name)
+      );
+    }
     set(merged);
   },
-  defaultCategories
+  [] as Category[]
 );
 
-/* ══════════════  ICON MAP  ══════════════ */
-
-export const icons = derived(categories, $cats =>
-  Object.fromEntries($cats.map(c => [
-    c.name,
-    { icon: c.icon, color: c.color }
-  ])));
+/** ── ICON LOOKUP ──────────────────────────────────────────── */
+export const icons = derived(categories, $cats => {
+  const map: Record<string, { icon: string; color: string }> = {};
+  $cats.forEach(c => {
+    map[c.name] = { icon: c.icon, color: c.color };
+  });
+  return map;
+});

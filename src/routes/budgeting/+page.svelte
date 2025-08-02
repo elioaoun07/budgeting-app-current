@@ -17,7 +17,12 @@
   import type { Category }        from '$lib/budgeting/defaults';
 
 
-  export let data: { username: string | null };
+  export let data: {
+    username: string | null;
+    accounts: { id: string; name: string }[];
+  };
+  
+  let selectedAccountId = data.accounts?.[0]?.id ?? '';
 
   let showCalc = false;
   let calcPrefill = '';
@@ -224,7 +229,7 @@
         const [salRes, allocRes, expRes] = await Promise.all([
           fetch('/budgeting/api/salary'),
           fetch('/budgeting/api/allocations'),
-          fetch('/budgeting/api/expenses'),
+          fetch('/budgeting/api/transactions'),
         ]);
 
         if (!salRes.ok || !allocRes.ok || !expRes.ok) {
@@ -252,11 +257,12 @@
       return;
     }
     submitting = true;
-    const res = await fetch('/budgeting/api/expenses', {
+    const res = await fetch('/budgeting/api/transactions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         date: new Date().toISOString().split('T')[0],
+        account_id: selectedAccountId,
         category: selectedMain,
         subcategory: selectedSub,
         amount,

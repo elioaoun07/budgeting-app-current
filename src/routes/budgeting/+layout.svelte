@@ -1,13 +1,18 @@
-<!-- src/routes/budgeting/+layout.svelte -->
 <script lang="ts">
-  import '../../app.css';
   import { onMount } from 'svelte';
-  import { initBudgetingStore } from '$lib/budgeting/store';
+  import { loadAccounts, loadCategories, loadUserPrefs, currentAccount } from '$lib/budgeting/store';
+  export let data; // { user, initialPrefs, accounts }
 
-  // once the page is mounted in the browser, wire up our localStorage logic
+  // on start load their accounts
   onMount(() => {
-    initBudgetingStore();
+    loadAccounts();
   });
+
+  // whenever they pick (or we auto‐pick) an account, refresh cats + prefs
+  $: if ($currentAccount) {
+    loadCategories();
+    loadUserPrefs();
+  }
 </script>
 
 <slot />

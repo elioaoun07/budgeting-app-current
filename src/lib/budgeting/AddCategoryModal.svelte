@@ -1,36 +1,19 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import Icon, { icons as IconOptions } from '$lib/icons/Icon.svelte';
-  import { rawPrefs } from '$lib/budgeting/store';
+  import { createCategory } from '$lib/budgeting/store';
 
   let name = '';
   let color = '#1e90ff';
   let selected = IconOptions[0] || '';
 
-  const dispatch = createEventDispatcher<{
-    save: { name: string; icon: string; color: string };
-    cancel: void;
-  }>();
+  const dispatch = createEventDispatcher<{ save: void; cancel: void }>();
 
-  function choose(iconName: string) {
-    selected = iconName;
-  }
-
-   function save() {
+  async function save() {
     if (!name.trim()) return;
-
-    /* ⬇  push into the prefs store so it’s persisted */
-    rawPrefs.update(p => ({
-        ...p,
-        added: [
-            ...p.added,
-            { name: name.trim(), icon: selected, color }
-        ]
-    }));
-
-    /* Optional: if a parent wants to react, still fire the event */
-    dispatch('save', { name: name.trim(), icon: selected, color });
- }
+    await createCategory(name.trim(), selected, color);
+    dispatch('save');
+  }
 
   function cancel() {
     dispatch('cancel');

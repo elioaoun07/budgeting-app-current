@@ -1,23 +1,29 @@
-node_modules
+# Node modules
+node_modules/
 
-# Output
-.output
-.vercel
-.netlify
-.wrangler
-/.svelte-kit
-/build
+# SvelteKit build
+.svelte-kit/
+build/
+dist/
 
-# OS
+# TypeScript cache
+*.tsbuildinfo
+
+# Env files
+.env
+.env.*.local
+
+# Logs
+*.log
+
+# OS files
 .DS_Store
 Thumbs.db
 
-# Env
-.env
-.env.*
-!.env.example
-!.env.test
+# IDE
+.vscode/
+.idea/
+*.code-workspace
 
-# Vite
-vite.config.js.timestamp-*
-vite.config.ts.timestamp-*
+# Caches
+.cache/
