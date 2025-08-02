@@ -1,427 +1,399 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { get } from 'svelte/store';
-  import CalculatorModal from '$lib/budgeting/CalculatorModal.svelte';
-  import ScheduledPopup from '$lib/budgeting/ScheduledPopup.svelte';
-  import Sidebar from '$lib/budgeting/Sidebar.svelte';
-  import SalaryModal from '$lib/budgeting/SalaryModal.svelte';
-  import RecurringModal from '$lib/budgeting/RecurringModal.svelte';
-  import QuickSpeechEntry from '$lib/budgeting/QuickSpeechEntry.svelte';
-  import { localParse } from '$lib/budgeting/localNLP.js';
-  import CameraModal from '$lib/budgeting/CameraModal.svelte';
-  import AddCategoryModal from '$lib/budgeting/AddCategoryModal.svelte';
-  import CategoryManagementModal from '$lib/budgeting/CategoryManagementModal.svelte';
-  import Icon from '$lib/icons/Icon.svelte';
-  import { categories, rawPrefs } from '$lib/budgeting/store';
-  import { defaultCategories }    from '$lib/budgeting/defaults';
-  import type { Category }        from '$lib/budgeting/defaults';
+	import { onMount } from 'svelte';
+	import { get } from 'svelte/store';
+	import { currentAccount } from '$lib/budgeting/store';
+	import CalculatorModal from '$lib/budgeting/CalculatorModal.svelte';
+	import ScheduledPopup from '$lib/budgeting/ScheduledPopup.svelte';
+	import Sidebar from '$lib/budgeting/Sidebar.svelte';
+	import SalaryModal from '$lib/budgeting/SalaryModal.svelte';
+	import RecurringModal from '$lib/budgeting/RecurringModal.svelte';
+	import QuickSpeechEntry from '$lib/budgeting/QuickSpeechEntry.svelte';
+	import { localParse } from '$lib/budgeting/localNLP.js';
+	import CameraModal from '$lib/budgeting/CameraModal.svelte';
+	import AddCategoryModal from '$lib/budgeting/AddCategoryModal.svelte';
+	import CategoryManagementModal from '$lib/budgeting/CategoryManagementModal.svelte';
+	import Icon from '$lib/icons/Icon.svelte';
+	import { categories, createCategory, saveCategories, rawPrefs } from '$lib/budgeting/store';
+	import type { Category } from '$lib/budgeting/defaults';
+
+	/* REACTIVE: current selected account ID */
+	$: selectedAccountId = $currentAccount?.id ?? '';
+
+	export let data: {
+		username: string | null;
+		accounts: { id: string; name: string }[];
+	};
+
+	/* --------------------------------------------------------- */
+	/* Everything below is unchanged from your previous version. */
+	/* --------------------------------------------------------- */
+
+	/* UI state */
+	let showCalc = false;
+	let calcPrefill = '';
+	let editingSalary = false;
+	let salaryInput = '';
+	let showSidebar = false;
+	let showSalaryModal = false;
+	let showRecModal = false;
+	let showCam = false;
+	let showAddModal = false;
+	let tithing = 0, needs = 0, wants = 0, saving = 0;
+
+	$: if (salary !== null) {
+		tithing = salary * 0.11;
+		const remaining = salary - tithing;
+		needs = remaining * 0.50;
+		wants = remaining * 0.30;
+		saving = remaining * 0.20;
+	}
+
+	let currentCat: Category | undefined;
+	$: currentCat = $categories.find(c => c.name === selectedMain);
+	$: if (!selectedMain && $categories.length) {
+		selectedMain = $categories[0].name;
+	}
+
+	const handleAddRecurring = () => (showRecModal = true);
+
+	function handleCalcResult(val: string) { amount = val; }
+	function openSidebar() { showSidebar = true; }
+	function closeSidebar() { showSidebar = false; }
+	function openSalaryModal() { showSalaryModal = true; }
+	function closeSalaryModal() { showSalaryModal = false; }
+	function openCamera() { showCam = true; }
+	function handleRequestAddCategory() { showAddModal = true; }
+	function handleCancel() { showAddModal = false; }
+
+	let showEditCategories = false;
+
+	function openEditCategories() {
+		showEditCategories = true;
+	}
+
+	function handleSaveCategories(event: CustomEvent<string[]>) {
+		const newOrder = event.detail;
+
+		const reordered = [...$categories].sort(
+		(a, b) => newOrder.indexOf(a.name) - newOrder.indexOf(b.name)
+		);
+
+		saveCategories(reordered);          // persist  
+		showEditCategories = false;
+  	}
 
 
-  export let data: {
-    username: string | null;
-    accounts: { id: string; name: string }[];
-  };
-  
-  let selectedAccountId = data.accounts?.[0]?.id ?? '';
+	function handleCancelEdit() {
+		showEditCategories = false;
+	}
 
-  let showCalc = false;
-  let calcPrefill = '';
-  let editingSalary = false;
-  let salaryInput = '';
-  let showSidebar = false;
-  let showSalaryModal = false; 
-  let showRecModal = false;
-  let showCam = false;
-  let showAddModal = false;
+	function handleAddCategory({ detail: { name, icon, color } }) {
+		createCategory(name, icon, color);  // persist + update store
+		showAddModal = false;
+	}
 
-  let tithing = 0, needs = 0, wants = 0, saving = 0;
-
-  $: if (salary !== null) {
-    tithing         = salary * 0.11;
-    const remaining = salary - tithing;
-
-    needs  = remaining * 0.50;
-    wants  = remaining * 0.30;
-    saving = remaining * 0.20;
-  }
-
-  let currentCat: Category | undefined;
-  $: currentCat = $categories.find(c => c.name === selectedMain);
-
-  $: if (!selectedMain && $categories.length) {
-    selectedMain = $categories[0].name;
-  }
-
-  const handleAddRecurring = () => (showRecModal = true);
-
-  function handleCalcResult(val: string) {amount = val;}
-  function openSidebar() { showSidebar = true; }
-  function closeSidebar() { showSidebar = false; }
-  function openSalaryModal() { showSalaryModal = true; }
-  function closeSalaryModal() { showSalaryModal = false; }
-  function openCamera() { showCam = true; }
-  function handleRequestAddCategory() {showAddModal = true;}
-  function handleCancel() {showAddModal = false;}
+	function removeCategory(name: string) {
+		const filtered = $categories.filter(c => c.name !== name);
+		saveCategories(filtered);
+	}
 
 
-  let showEditCategories = false;
-    function openEditCategories() {
-      showEditCategories = true;
-    }
-    function handleSaveCategories(event: CustomEvent<string[]>) {
-      const newOrder = event.detail;
-      rawPrefs.update(p => {
-        // keep only those added categories still in newOrder
-        const keptAdded = p.added.filter(c => newOrder.includes(c.name));
-        // compute which defaults were removed
-        const removed = defaultCategories
-          .map(d => d.name)
-          .filter(name => !newOrder.includes(name));
-        return {
-          added:   keptAdded,
-          removed,
-          order:   newOrder
-        };
-      });
-      showEditCategories = false;
-    }
-    function handleCancelEdit() {
-      showEditCategories = false;
-  }
-    
-  function handleAddCategory({ detail: { name, icon, color } }) {
-    rawPrefs.update(p => ({
-      added:   [...p.added, { name, icon, color }],
-      removed: p.removed.filter(r => r !== name),
-      order:   [...p.order, name]
-    }));
-    showAddModal = false;
-  }
+	function reorder(newOrder: string[]) {
+		const reordered = [...$categories].sort(
+		(a, b) => newOrder.indexOf(a.name) - newOrder.indexOf(b.name)
+		);
+		saveCategories(reordered);
+	}
 
-    function removeCategory(name: string) {
-    rawPrefs.update(p => ({
-      added:   p.added.filter(c => c.name !== name),
-      removed: [...p.removed, name],
-      order:   p.order.filter(n => n !== name)
-    }));
-  }
+	// const categoryDefinitions = {
+	//   Shopping: ['Supermarket', 'Home utilities'],
+	//   Car: ['Fuel', 'Insurance', 'Repairs'],
+	//   Home: ['Electricity', 'Generator', 'Maintenance','Water'],
+	//   Entertainment: ['Dining Out', 'Movies', 'Outing'],
+	//   Personal: ['Shopping', 'Selfcare'],
+	//   Gifts: ['Birthday', 'Wedding', 'Christmas'],
+	//   Healthcare: ['Doctor Visit', 'Pharmacy', 'Skincare','Health Insurance'],
+	//   Travel: ['Flight', 'Hotel', 'Car Rental']
+	// };
 
-  function reorder(newOrder: string[]) {
-    rawPrefs.update(p => ({ ...p, order: newOrder }));
-  }
+	// const iconDefinitions = {
+	//   Shopping: '🥗',
+	//   Car: '🚗',
+	//   Home: '🏠',
+	//   Entertainment: '🍿',
+	//   Personal: '👤',
+	//   Healthcare: '🏥',
+	//   Travel: '✈️',
+	//   Gifts: '🎁'
+	// };
 
-  // const categoryDefinitions = {
-  //   Shopping: ['Supermarket', 'Home utilities'],
-  //   Car: ['Fuel', 'Insurance', 'Repairs'],
-  //   Home: ['Electricity', 'Generator', 'Maintenance','Water'],
-  //   Entertainment: ['Dining Out', 'Movies', 'Outing'],
-  //   Personal: ['Shopping', 'Selfcare'],
-  //   Gifts: ['Birthday', 'Wedding', 'Christmas'],
-  //   Healthcare: ['Doctor Visit', 'Pharmacy', 'Skincare','Health Insurance'],
-  //   Travel: ['Flight', 'Hotel', 'Car Rental']
-  // };
+	let selectedMain = '';
+	$: if (!selectedMain && $categories.length) {
+		selectedMain = $categories[0].name;
+	}
 
-  // const iconDefinitions = {
-  //   Shopping: '🥗',
-  //   Car: '🚗',
-  //   Home: '🏠',
-  //   Entertainment: '🍿',
-  //   Personal: '👤',
-  //   Healthcare: '🏥',
-  //   Travel: '✈️',
-  //   Gifts: '🎁'
-  // };
+	let selectedSub = '';
+	let amount = '';
+	let description = '';
+	let salary: number | null = null;
+	let submitting = false;
+	let allocations: any[] = [];
+	let expenses: any[] = [];
+	let reminders: any[] = [];
+	let popupItem: any = null;
+	let initialCheckDone = false;
+	let showNotifs = false;
+	let today = new Date();
 
-  let selectedMain = '';
-  $: if (!selectedMain && $categories.length) {
-   selectedMain = $categories[0].name;
-  }
-  let selectedSub = '';
-  let amount = '';
-  let description = '';
-  let salary: number | null = null;
-  let submitting = false;
+	/* how many days left before/after the next due date */
+	function daysUntilNext(row) {
+		const next = new Date(row.nextDate);
+		const today = new Date();
+		return Math.floor((next.getTime() - today.getTime()) / 86_400_000);
+	}
 
-  let allocations: any[] = [];
-  let expenses: any[] = [];
+	function isPaidForCycle(row) {
+		if (!row.lastPaid) return false;
+		const paid = new Date(row.lastPaid);
+		const next = new Date(row.nextDate);
+		return row.frequency === 'Monthly'
+			? paid.getFullYear() === next.getFullYear() &&
+				paid.getMonth() === next.getMonth()
+			: paid.getFullYear() === next.getFullYear();
+	}
 
-  let reminders: any[] = [];
-  let popupItem: any = null;
-  let initialCheckDone = false;
+	function reminderTriggered(row) {
+		if (!row.reminder) return false;
+		const now = new Date();
+		const next = new Date(row.nextDate);
+		if (row.reminder.type === 'absolute') {
+			return now >= new Date(row.reminder.when);
+		}
+		// relative
+		const offsetMs = row.reminder.value * {
+			minute: 60_000,
+			hour: 3_600_000,
+			day: 86_400_000
+		}[row.reminder.unit];
+		return now >= new Date(next.getTime() - offsetMs);
+	}
 
-  let showNotifs = false;
-  let today = new Date();
+	function urgency(row) {
+		const d = daysUntilNext(row);
+		if (d < 0) return 'overdue';   // red
+		if (d <= 3) return 'due';      // yellow
+		return 'ok';                   // green
+	}
 
-  /* how many days left before/after the next due date */
-  function daysUntilNext(row) {
-    const next = new Date(row.nextDate);
-    const today = new Date();
-    return Math.floor((next.getTime() - today.getTime()) / 86_400_000);
-  }
+	function stepFive(direction: 'up' | 'down') {
+		let num = parseFloat(amount);
+		if (isNaN(num)) {
+			alert('Enter a valid amount first');
+			return;
+		}
+		if (direction === 'up') {
+			num = num % 5 === 0 ? num + 5 : Math.ceil(num / 5) * 5;
+		} else {
+			num = num % 5 === 0 ? num - 5 : Math.floor(num / 5) * 5;
+			if (num < 0) num = 0;
+		}
+		amount = Number.isInteger(num) ? String(num) : num.toFixed(2);
+	}
 
-  function isPaidForCycle(row) {
-    if (!row.lastPaid) return false;
-    const paid = new Date(row.lastPaid);
-    const next = new Date(row.nextDate);
+	function openCalculator() {
+		calcPrefill = amount;
+		showCalc = true;
+	}
 
-    return row.frequency === 'Monthly'
-      ? paid.getFullYear() === next.getFullYear() &&
-        paid.getMonth()   === next.getMonth()      // same month
-      : paid.getFullYear() === next.getFullYear();  // yearly: same year
-  }
+	// Fetch initial data on mount
+	onMount(() => {
+		const interval = setInterval(checkScheduled, 30000);
+		checkScheduled(true);
+		(async () => {
+			try {
+				const [salRes, allocRes, expRes] = await Promise.all([
+					fetch('/budgeting/api/salary'),
+					fetch('/budgeting/api/allocations'),
+					fetch('/budgeting/api/transactions'),
+				]);
+				if (!salRes.ok || !allocRes.ok || !expRes.ok) {
+					console.error('One or more API calls failed');
+					return;
+				}
+				const salData = await salRes.json();
+				salary = parseFloat(salData.salary || '0');
+				salaryInput = String(salary);
+				allocations = await allocRes.json();
+				expenses = await expRes.json();
+			} catch (e) {
+				console.error('Error fetching initial data:', e);
+			}
+		})();
+		return () => clearInterval(interval);
+	});
 
-  function reminderTriggered(row) {
-    if (!row.reminder) return false;
+	async function submit() {
+		if (!selectedSub || !amount) {
+			alert('Please fill all fields');
+			return;
+		}
+		submitting = true;
+		const res = await fetch('/budgeting/api/transactions', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				date: new Date().toISOString().split('T')[0],
+				account_id: selectedAccountId,
+				category: selectedMain,
+				subcategory: selectedSub,
+				amount,
+				description
+			})
+		});
+		const result = await res.json();
+		submitting = false;
+		if (result.success) {
+			amount = '';
+			selectedSub = '';
+			alert('Expense added ✅');
+		} else {
+			alert('Failed to submit: ' + result.error);
+		}
+	}
 
-    const now  = new Date();
-    const next = new Date(row.nextDate);
+	async function checkScheduled(showOnLoad = false) {
+		try {
+			const res = await fetch('/budgeting/api/scheduled');
+			if (!res.ok) return console.error('Scheduled API failed');
+			const data = await res.json();
+			if (!Array.isArray(data)) return console.error('Bad response', data);
+			/* keep unpaid items whose next date is ≤ 30 days away */
+			reminders = data.filter(
+				r => !isPaidForCycle(r) && daysUntilNext(r) <= 30
+			);
+			/* first UI decision */
+			if (showOnLoad && !initialCheckDone && reminders.length) {
+				const auto = reminders.find(reminderTriggered);
+				if (auto) {
+					popupItem = auto;               // auto-popup
+				} else if (reminders.some(r => urgency(r) === 'overdue')) {
+					showNotifs = true;              // open drawer if something is red
+				} else {
+					popupItem = reminders[0];       // fallback: first item
+				}
+				initialCheckDone = true;
+			}
+		} catch (err) {
+			console.error('Failed to fetch scheduled payments:', err);
+		}
+	}
 
-    if (row.reminder.type === 'absolute') {
-      return now >= new Date(row.reminder.when);
-    }
+	async function markAsPaid(item) {
+		const res = await fetch('/budgeting/api/scheduled', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				category: item.category,
+				subcategory: item.subcategory,
+				amount: item.amount
+			})
+		});
+		const result = await res.json();
+		if (result.success) {
+			alert(`${item.category} - ${item.subcategory} marked as paid ✅`);
+			popupItem = null;
+			checkScheduled();
+		}
+	}
 
-    // relative
-    const offsetMs = row.reminder.value * {
-      minute: 60_000,
-      hour:   3_600_000,
-      day:    86_400_000
-    }[row.reminder.unit];
+	function getAllocation(cat: string, sub: string): number {
+		const direct = allocations.find(a => a.category === cat && a.subcategory === sub);
+		if (direct) return parseFloat(direct.amount || '0');
+		const master = allocations.find(a => a.category === cat && a.subcategory === 'Master');
+		if (master?.percentage && salary !== null) {
+			return (parseFloat(master.percentage) / 100) * salary;
+		}
+		return 0;
+	}
 
-    return now >= new Date(next.getTime() - offsetMs);
-  }
+	function getSpent(cat: string, sub: string): number {
+		return expenses
+			.filter(e => e.category === cat && e.subcategory === sub)
+			.reduce((sum, e) => sum + e.amount, 0);
+	}
 
-  function urgency(row) {
-    const d = daysUntilNext(row);
-    if (d < 0)  return 'overdue';   // red
-    if (d <= 3) return 'due';       // yellow
-    return 'ok';                    // green
-  }
+	async function saveNewSalary(newVal: number) {
+		const res = await fetch('/budgeting/api/salary', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ salary: newVal })
+		});
+		if (res.ok) {
+			salary = newVal;
+			alert('Salary updated ✅');
+		} else {
+			alert('Failed to save salary');
+		}
+		closeSalaryModal();
+	}
 
-  function stepFive(direction: 'up' | 'down') {
-    let num = parseFloat(amount);
-    if (isNaN(num)) {
-      alert('Enter a valid amount first');
-      return;
-    }
+	// Save edited salary
+	async function saveSalary() {
+		const newSalary = parseFloat(salaryInput);
+		if (isNaN(newSalary)) {
+			alert('Please enter a valid number');
+			return;
+		}
+		const res = await fetch('/budgeting/api/salary', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ salary: newSalary })
+		});
+		if (res.ok) {
+			salary = newSalary;
+			editingSalary = false;
+			alert('Salary updated ✅');
+		} else {
+			alert('Failed to save salary');
+		}
+	}
 
-    if (direction === 'up') {
-      num = num % 5 === 0 ? num + 5 : Math.ceil(num / 5) * 5;
-    } else {
-      num = num % 5 === 0 ? num - 5 : Math.floor(num / 5) * 5;
-      if (num < 0) num = 0;
-    }
+	async function saveRecurring(e) {
+		const rec = e.detail;
+		const res = await fetch('/budgeting/api/recurring', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(rec)
+		});
+		alert((await res.json()).success ? 'Saved ✅' : 'Error ❌');
+	}
 
-    amount = Number.isInteger(num) ? String(num) : num.toFixed(2);
-  }
-  
-  function openCalculator() {
-    calcPrefill = amount;   // whatever is currently in the Amount field
-    showCalc = true;
-  }
+	async function handleSpeech(e) {
+		const text = e.detail;
+		/* DEBUG: show raw speech */
+		description = text;
+		console.log('Speech transcript:', text);
+		const parsed = localParse(text);
+		console.log('Local NLP result:', parsed);
+		if (!parsed) {
+			alert('Could not understand; please edit manually.');
+			return;
+		}
+		if (parsed.amount) amount = String(parsed.amount);
+		if (parsed.category) selectedMain = parsed.category;
+		if (parsed.subcategory) selectedSub = parsed.subcategory;
+		description = parsed.description; // keep transcript
+	}
 
-  // Fetch initial data on mount
-  onMount(() => {
-    const interval = setInterval(checkScheduled, 30000);
-    checkScheduled(true);
-
-    (async () => {
-      try {
-        const [salRes, allocRes, expRes] = await Promise.all([
-          fetch('/budgeting/api/salary'),
-          fetch('/budgeting/api/allocations'),
-          fetch('/budgeting/api/transactions'),
-        ]);
-
-        if (!salRes.ok || !allocRes.ok || !expRes.ok) {
-          console.error('One or more API calls failed');
-          return;
-        }
-
-        const salData = await salRes.json();
-        salary = parseFloat(salData.salary || '0');
-        salaryInput = String(salary);
-
-        allocations = await allocRes.json();
-        expenses = await expRes.json();
-      } catch (e) {
-        console.error('Error fetching initial data:', e);
-      }
-    })();
-
-    return () => clearInterval(interval);
-  });
-
-  async function submit() {
-    if (!selectedSub || !amount) {
-      alert('Please fill all fields');
-      return;
-    }
-    submitting = true;
-    const res = await fetch('/budgeting/api/transactions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        date: new Date().toISOString().split('T')[0],
-        account_id: selectedAccountId,
-        category: selectedMain,
-        subcategory: selectedSub,
-        amount,
-        description
-      })
-    });
-    const result = await res.json();
-    submitting = false;
-    if (result.success) {
-      amount = '';
-      selectedSub = '';
-      alert('Expense added ✅');
-    } else {
-      alert('Failed to submit: ' + result.error);
-    }
-  }
-
-  async function checkScheduled(showOnLoad = false) {
-    try {
-      const res = await fetch('/budgeting/api/scheduled');
-      if (!res.ok) return console.error('Scheduled API failed');
-      const data = await res.json();
-      if (!Array.isArray(data)) return console.error('Bad response', data);
-
-      /* keep unpaid items whose next date is ≤ 30 days away */
-      reminders = data.filter(
-        r => !isPaidForCycle(r) && daysUntilNext(r) <= 30
-      );
-
-      /* first UI decision */
-      if (showOnLoad && !initialCheckDone && reminders.length) {
-        const auto = reminders.find(reminderTriggered);
-
-        if (auto) {
-          popupItem = auto;               // auto-popup
-        } else if (reminders.some(r => urgency(r) === 'overdue')) {
-          showNotifs = true;              // open drawer if something is red
-        } else {
-          popupItem = reminders[0];       // fallback: first item
-        }
-        initialCheckDone = true;
-      }
-    } catch (err) {
-      console.error('Failed to fetch scheduled payments:', err);
-    }
-  }
-
-  async function markAsPaid(item) {
-    const res = await fetch('/budgeting/api/scheduled', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        category: item.category,
-        subcategory: item.subcategory,
-        amount: item.amount
-      })
-    });
-    const result = await res.json();
-    if (result.success) {
-      alert(`${item.category} - ${item.subcategory} marked as paid ✅`);
-      popupItem = null;
-      checkScheduled();
-    }
-  }
-
-  function getAllocation(cat: string, sub: string): number {
-    const direct = allocations.find(a => a.category === cat && a.subcategory === sub);
-    if (direct) return parseFloat(direct.amount || '0');
-    const master = allocations.find(a => a.category === cat && a.subcategory === 'Master');
-    if (master?.percentage && salary !== null) {
-      return (parseFloat(master.percentage) / 100) * salary;
-    }
-    return 0;
-  }
-
-  function getSpent(cat: string, sub: string): number {
-    return expenses
-      .filter(e => e.category === cat && e.subcategory === sub)
-      .reduce((sum, e) => sum + e.amount, 0);
-  }
-
-  async function saveNewSalary(newVal: number) {
-    const res = await fetch('/budgeting/api/salary', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ salary: newVal })
-    });
-    if (res.ok) {
-      salary = newVal;
-      alert('Salary updated ✅');
-    } else {
-      alert('Failed to save salary');
-    }
-    closeSalaryModal();
-  }
-
-  // Save edited salary
-  async function saveSalary() {
-    const newSalary = parseFloat(salaryInput);
-    if (isNaN(newSalary)) {
-      alert('Please enter a valid number');
-      return;
-    }
-    const res = await fetch('/budgeting/api/salary', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ salary: newSalary })
-    });
-    if (res.ok) {
-      salary = newSalary;
-      editingSalary = false;
-      alert('Salary updated ✅');
-    } else {
-      alert('Failed to save salary');
-    }
-  }
-
- async function saveRecurring(e) {
-    const rec = e.detail;
-    const res = await fetch('/budgeting/api/recurring', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(rec)
-    });
-    alert((await res.json()).success ? 'Saved ✅' : 'Error ❌');
-  }
-
-  async function handleSpeech(e) {
-    const text = e.detail;
-
-    /* DEBUG: show raw speech */
-    description = text;
-    console.log('Speech transcript:', text);
-
-    const parsed = localParse(text);
-    console.log('Local NLP result:', parsed);
-
-    if (!parsed) {
-      alert('Could not understand; please edit manually.');
-      return;
-    }
-
-    if (parsed.amount)      amount       = String(parsed.amount);
-    if (parsed.category)    selectedMain = parsed.category;
-    if (parsed.subcategory) selectedSub  = parsed.subcategory;
-    description = parsed.description;    // keep transcript
-  }
-
-  function handleOCR(e) {
-    const text   = e.detail as string;
-    console.log('OCR raw:', text);
-
-    const parsed = localParse(text) || {};
-    if (parsed.amount)      amount       = String(parsed.amount);
-    if (parsed.category)    selectedMain = parsed.category;
-    if (parsed.subcategory) selectedSub  = parsed.subcategory;
-    description = parsed.description ?? text;
-  }
-  
+	function handleOCR(e) {
+		const text = e.detail as string;
+		console.log('OCR raw:', text);
+		const parsed = localParse(text) || {};
+		if (parsed.amount) amount = String(parsed.amount);
+		if (parsed.category) selectedMain = parsed.category;
+		if (parsed.subcategory) selectedSub = parsed.subcategory;
+		description = parsed.description ?? text;
+	}
 </script>
 
 <style>

@@ -9,8 +9,8 @@ export const GET: RequestHandler = async ({ url, locals }) => {
   if (!accountId) throw kitError(400, 'Missing accountId');
 
   const { data, error } = await supabase
-    .from('categories')
-    .select('name,icon,color,subs')
+    .from('user_categories')
+    .select('name,icon,color')
     .eq('user_id',    locals.user.id)
     .eq('account_id', accountId)
     .order('inserted_at', { ascending: true });
@@ -34,8 +34,7 @@ export const POST: RequestHandler = async ({ url, request, locals }) => {
       account_id: accountId,
       name,
       icon,
-      color,
-      subs: subs ?? []
+      color
     })
     .select('name,icon,color,subs')
     .single();

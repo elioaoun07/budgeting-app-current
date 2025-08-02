@@ -1,32 +1,38 @@
-// add accountId parameter everywhere
-export async function getUserCategoryPrefs(
+import { supabase } from '$lib/supabaseClient';
+import type { Category } from '$lib/budgeting/defaults';
+
+/* ─────────────── Types ─────────────── */
+export type UserCategories = Category[];   // whole list
+
+/* ───────── Fetch full list ───────── */
+export async function getUserCategories(
   userId: string,
   accountId: string
-): Promise<UserPrefs> {
+): Promise<UserCategories> {
   const { data, error } = await supabase
     .from('user_category_prefs')
-    .select('prefs')
+    .select('categories')
     .eq('user_id',    userId)
     .eq('account_id', accountId)
-    .single();
+    .single();                  // row or none
 
-  if (error && error.code === 'PGRST116') {
-    return { added: [], removed: [], order: [] };
-  }
-  if (error) throw error;
-  return data!.prefs as UserPrefs;
+  if (error && error.code !== 'PGRST116') throw error; // 116 = no row
+
+  return data?.categories ?? [];          // empty → use defaults
 }
 
-export async function saveUserCategoryPrefs(
+/* ───────── Upsert full list ───────── */
+export async function saveUserCategories(
   userId: string,
   accountId: string,
-  prefs: UserPrefs
-): Promise<void> {
+  categories: UserCategories
+) {
   const { error } = await supabase
     .from('user_category_prefs')
     .upsert(
-      { user_id: userId, account_id: accountId, prefs },
-      { onConflict: ['user_id','account_id'], returning: 'minimal' }
+      { user_id: userId, account_id: accountId, categories },
+      { onConflict: ['user_id', 'account_id'] }
     );
+
   if (error) throw error;
 }

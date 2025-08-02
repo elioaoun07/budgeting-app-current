@@ -1,27 +1,29 @@
 <!doctype html>
 <html lang="en">
-	<head>
-		<link rel="manifest" href="/manifest.json" />
-		<meta name="theme-color" content="#1e90ff" />
+  <head>
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#1e90ff" />
 
-		<!-- iOS support -->
-		<meta name="apple-mobile-web-app-capable" content="yes" />
-		<meta name="apple-mobile-web-app-status-bar-style" content="default" />
-		<link rel="apple-touch-icon" href="/pwa-192x192.png" />
-		<meta name="apple-mobile-web-app-title" content="My Budgeting App" />
+    <!-- PWA support -->
+    <meta name="mobile-web-app-capable" content="yes" />
 
-		<!-- viewport for mobile -->
-		<meta name="viewport" content="width=device-width,initial-scale=1" />
-		<meta charset="utf-8" />
-		<link rel="icon" href="%sveltekit.assets%/favicon.png" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		%sveltekit.head%
-		<script
-			src="https://code.iconify.design/iconify-icon/1.1.4/iconify-icon.min.js"
-			defer
-		></script>
-	</head>
-	<body data-sveltekit-preload-data="hover">
-		<div style="display: contents">%sveltekit.body%</div>
-	</body>
+    <!-- (Optional: remove this if you no longer need old iOS support) -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="apple-touch-icon" href="/pwa-192x192.png" />
+    <meta name="apple-mobile-web-app-title" content="My Budgeting App" />
+
+    <!-- viewport for mobile -->
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta charset="utf-8" />
+    <link rel="icon" href="%sveltekit.assets%/favicon.png" />
+    %sveltekit.head%
+    <script
+      src="https://code.iconify.design/iconify-icon/1.1.4/iconify-icon.min.js"
+      defer
+    ></script>
+  </head>
+  <body data-sveltekit-preload-data="hover">
+    <div style="display: contents">%sveltekit.body%</div>
+  </body>
 </html>
