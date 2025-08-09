@@ -1,4 +1,4 @@
-import { GoogleSpreadsheet } from 'google-spreadsheet';
+/*import { GoogleSpreadsheet } from 'google-spreadsheet';
 import creds from '$lib/credentials.json';
 //import { SPREADSHEET_ID } from '$env/static/private';
 
@@ -166,4 +166,4 @@ export async function listScheduled() {
 //   const doc   = await getDoc();
 //   const sheet = doc.sheetsByTitle['Scheduled'];
 //   return await sheet.getRows();
-// }
+// }*/
