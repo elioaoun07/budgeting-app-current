@@ -1,1 +1,0 @@
-import{t,a as r}from"../chunks/CGPwJ-PK.js";import"../chunks/BqG6SY_L.js";import{n as o}from"../chunks/Dmv7ZRbC.js";var n=t('<h1>Welcome to My Life Manager</h1> <nav><a href="/budgeting">💰 Budgeting</a> <a href="/recipes">🍲 Recipes</a> <a href="/outfits">👚 Outfits</a></nav>',1);function m(a){var e=n();o(2),r(a,e)}export{m as component};
