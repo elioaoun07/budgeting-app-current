@@ -1,4 +1,25 @@
 /* ──────────────────────────────────────────────────────────────
+   src/lib/budgeting/defaults.ts
+
+   Purpose   ▸ Hard-coded fallback data: the canonical list of
+               “expense” and “income” categories used when a user
+               has no custom preferences yet.
+
+   Exports   ▸
+     • interface  Category
+     • const      defaultCategoriesByType
+     • func       getDefaultCategories()
+
+   Used by   ▸
+     • store.ts            – seeds first-time users with defaults
+     • db.ts               – returns defaults when SQL row is absent
+     • Any UI that needs a full list without waiting for the API
+
+   Calls     ▸ none (pure constants / helpers)
+───────────────────────────────────────────────────────────────── */
+
+
+/* ──────────────────────────────────────────────────────────────
    Category model
 ──────────────────────────────────────────────────────────────── */
 export interface Category {
@@ -35,7 +56,7 @@ export const defaultCategoriesByType: Record<'expense' | 'income', Category[]> =
     {
       name:  'Entertainment',
       icon:  'Film',
-      color: '#ff1493',
+      color: '#433d94ff',
       subs:  ['Dining Out', 'Movies', 'Outing']
     },
     {
@@ -66,9 +87,9 @@ export const defaultCategoriesByType: Record<'expense' | 'income', Category[]> =
 
   /* -------- INCOME (3 items) -------- */
   income: [
-    { name: 'Salary', icon: '💰', color: '#10b981' },
-    { name: 'Bonus',  icon: '🎉', color: '#3b82f6' },
-    { name: 'Gift',   icon: '🎁', color: '#f59e0b' }
+    { name: 'Salary', icon: 'Salary', color: '#10b981' },
+    { name: 'Bonus',  icon: 'Bonus', color: '#3b82f6' },
+    { name: 'Gift',   icon: 'Gift', color: '#f59e0b' }
   ]
 };
 

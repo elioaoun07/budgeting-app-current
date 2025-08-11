@@ -1,3 +1,24 @@
+<!-- ─────────────────────────────────────────────────────────────
+     src/lib/budgeting/AddAccountModal.svelte
+
+  Purpose ▸ Small pop-up dialog that lets the user create a new 
+            money “account” (wallet, cash, bank, credit-card …).
+
+  Props   ▸ `open` (boolean, two-way bound) – true  → modal visible
+                                            – false → hidden / closed
+
+  Depends ▸ `createAccount()`  from store.ts  (adds the row then
+            refreshes the Svelte store)
+
+  Emits   ▸ none (state is lifted via the `open` prop)
+
+  Used in ▸ Sidebar.svelte 
+
+  UX      ▸ Esc key closes the modal;  “Add” button is disabled until
+            the Name field is non-blank.
+            “Type” select chooses between Income / Expense accounts.
+───────────────────────────────────────────────────────────────── -->
+
 <script lang="ts">
 	import { createAccount } from './store';
 	import { onMount } from 'svelte';

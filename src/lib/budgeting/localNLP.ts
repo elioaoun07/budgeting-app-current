@@ -1,3 +1,29 @@
+/* ──────────────────────────────────────────────────────────────
+   src/lib/budgeting/localNLP.ts
+
+   Purpose ▸ Very-lightweight “NLP” helper that pulls an **amount**,
+             **category**, **subcategory**, and free-form description
+             out of raw speech or OCR text.  Runs entirely offline in
+             the browser (no network, no AI model).
+
+   Exports ▸
+     • func localParse(text : string)
+         → { amount, category, subcategory, description } | null
+
+   Key steps ▸
+     1. Extract numeric amounts (digits, or words-to-number fallback)
+     2. Handle “change/refund” phrases to compute net amount
+     3. Map keywords → category / subcategory via `keywordMap`
+     4. Return `null` if nothing was recognised
+
+   Used by ▸
+     • QuickSpeechEntry.svelte  (mic input)
+     • CameraModal.svelte       (OCR result)
+     • routes/budgeting/+page.svelte (expense form helpers)
+
+   Calls ▸ none – totally self-contained
+───────────────────────────────────────────────────────────────── */
+
 /* ---- tiny words-to-number helper ---------------------------------- */
 function wordsToNumber(str: string) {
   const map: Record<string, number> = {

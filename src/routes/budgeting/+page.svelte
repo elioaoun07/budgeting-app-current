@@ -397,134 +397,303 @@
 </script>
 
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+  /* --- Updated Styles to Match Main Layout --- */
+
   .page {
+    /* Inherit font from main layout */
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     max-width: 600px;
     margin: auto;
     padding: 20px;
-    font-family: sans-serif;
+    /* Match the main content background slightly */
+    background: rgba(15, 23, 42, 0.3);
+    border-radius: 12px;
+    margin-top: 80px; /* Space for fixed header elements */
+    margin-bottom: 20px;
   }
+
+  .header h1 {
+    /* Match page title color and weight */
+    color: #e2e8f0;
+    font-weight: 600;
+    margin: 0 0 1rem 0;
+    font-size: 1.5rem;
+  }
+
+  .edit-cats-btn {
+    background: none;
+    border: none;
+    font-size: 1rem;
+    cursor: pointer;
+    /* Match secondary text color */
+    color: #94a3b8;
+    opacity: 0.8;
+    transition: all 0.2s ease;
+    border-radius: 4px;
+    padding: 4px;
+  }
+  .edit-cats-btn:hover {
+    opacity: 1;
+    color: #e2e8f0;
+    background: rgba(59, 130, 246, 0.1);
+  }
+
+  /* --- Category Icons --- */
   .cat-icons {
     display: flex;
     overflow-x: auto;
     gap: 8px;
     margin-bottom: 16px;
+    padding-bottom: 8px; /* Prevent scrollbar clipping */
   }
   .cat-button {
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 8px;
-    border: 1px solid #ccc;
+    padding: 10px 8px; /* Slightly more padding */
+    /* Match main layout input styles */
+    border: 1px solid rgba(71, 85, 105, 0.4);
     border-radius: 8px;
     width: 70px;
-    background-color: #f0f0f0;
+    /* Match main layout card background */
+    background-color: rgba(30, 41, 59, 0.5);
     cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .cat-button:hover {
+    /* Subtle hover effect */
+    background-color: rgba(59, 130, 246, 0.1);
+    border-color: rgba(59, 130, 246, 0.5);
   }
   .cat-button.selected {
-    border-color: teal;
-    background-color: #d1f3f1;
+    /* Match primary color for selection */
+    border-color: #3b82f6;
+    background-color: rgba(59, 130, 246, 0.15);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+  }
+  .cat-button div {
+    /* Adjust font size and color */
+    font-size: 12px;
+    color: #cbd5e1;
+    margin-top: 4px;
+  }
+
+  /* --- Radio List --- */
+  .radio-list {
+    margin-bottom: 1rem;
   }
   .radio-list label {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin: 4px 0;
+    margin: 6px 0;
+    padding: 6px 10px;
+    border-radius: 6px;
+    transition: background-color 0.2s ease;
+    cursor: pointer;
   }
-  .input-field {
-    margin-top: 16px;
-    padding: 8px;
-    width: 100%;
-    border: 1px solid #ccc;
-    border-radius: 4px;
+  .radio-list label:hover {
+    background-color: rgba(59, 130, 246, 0.05);
+  }
+  .radio-list input[type="radio"] {
+    /* Style the radio button to match */
+    accent-color: #3b82f6; /* Blue color for the dot */
+    width: 18px;
+    height: 18px;
+  }
+  .radio-list span {
+    /* Adjust font size and color */
+    font-size: 0.85rem;
+    color: #94a3b8;
   }
 
+  /* --- Input Fields --- */
+  .input-group {
+    margin-bottom: 1.25rem; /* Consistent spacing */
+  }
+
+  /* Base input field styles matching main layout */
+  .input-field {
+    width: 100%;
+    padding: 0.85rem 1rem;
+    /* Match main layout input background and border */
+    background: rgba(30, 41, 59, 0.7);
+    border: 1px solid rgba(71, 85, 105, 0.4);
+    border-radius: 8px;
+    font-size: 1rem;
+    color: #e2e8f0;
+    box-sizing: border-box;
+    transition: all 0.2s ease;
+    font-family: 'Inter', sans-serif;
+  }
+
+  .input-field:focus {
+    outline: none;
+    /* Match main layout focus state */
+    border-color: rgba(59, 130, 246, 0.8);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+    background: rgba(30, 41, 59, 0.9);
+  }
+
+  .input-field::placeholder {
+    /* Match placeholder color */
+    color: #94a3b8;
+    opacity: 1;
+  }
+
+  /* Specific styles for action buttons that look like inputs */
+  .action-button {
+    text-align: left;
+    cursor: pointer;
+    background: rgba(30, 41, 59, 0.7);
+    border: 1px solid rgba(71, 85, 105, 0.4);
+    color: #cbd5e1;
+    transition: all 0.2s ease;
+  }
+  .action-button:hover {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: rgba(59, 130, 246, 0.5);
+    color: #e2e8f0;
+  }
+
+  /* Textarea specific adjustments */
+  textarea.input-field {
+    min-height: 100px;
+    resize: vertical;
+  }
+
+  /* --- Round Buttons (Step Amount) --- */
   .round-btn {
     flex: 1;
-    padding: 6px 0;
-    font-size: 1.1rem;
-    background: #eee;
-    border: 1px solid #ccc;
-    border-radius: 4px;
+    padding: 8px 0; /* Slightly larger padding */
+    font-size: 1.2rem;
+    /* Match main layout button styles subtly */
+    background: rgba(30, 41, 59, 0.7);
+    border: 1px solid rgba(71, 85, 105, 0.4);
+    border-radius: 8px;
     cursor: pointer;
+    color: #cbd5e1;
+    transition: all 0.2s ease;
+    font-weight: 500;
   }
   .round-btn:hover {
-    background: #ddd; 
+    background: rgba(59, 130, 246, 0.1);
+    border-color: rgba(59, 130, 246, 0.5);
+    color: #e2e8f0;
   }
 
+  /* --- Submit Button --- */
   .submit-btn {
-    margin-top: 16px;
-    padding: 10px 20px;
-    background-color: teal;
+    width: 100%;
+    /* Match the primary button gradient from main layout */
+    background: linear-gradient(135deg, #1e3a8a, #3b82f6);
     color: white;
     border: none;
-    border-radius: 4px;
+    padding: 0.85rem;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 500;
     cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: 'Inter', sans-serif;
+    box-shadow: 0 4px 6px rgba(30, 58, 138, 0.2);
+    margin-top: 16px;
+    margin-bottom: 16px;
   }
+
+  .submit-btn:hover:not(:disabled) {
+    /* Slightly different gradient on hover */
+    background: linear-gradient(135deg, #2c5282, #4299e1);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 8px rgba(30, 58, 138, 0.3);
+  }
+
+  .submit-btn:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(30, 58, 138, 0.2);
+  }
+
+  .submit-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  /* --- Salary Line --- */
   .salary-line {
     margin-top: 24px;
     font-size: 0.9rem;
     text-align: right;
     opacity: 0.9;
+    /* Match text color */
+    color: #cbd5e1;
+    padding: 10px;
+    border-radius: 8px;
+    background: rgba(30, 41, 59, 0.5);
+    border: 1px solid rgba(71, 85, 105, 0.2);
+  }
+  .salary-line span {
+    font-weight: 500;
   }
 
-  .salary-text input {
-    width: 100px;
-    padding: 4px 8px;
-    font-size: 1em;
-  }
-
+  /* --- Notification Drawer --- */
   .notif-drawer {
-    position: absolute;   /* inside the bell container */
+    position: absolute;
     right: 0;
     top: 36px;
     min-width: 200px;
-    background: #fff;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    box-shadow: 0 2px 8px rgba(0,0,0,.15);
+    /* Match main layout card style */
+    background: rgba(15, 23, 42, 0.9);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(30, 58, 138, 0.2);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     z-index: 1001;
   }
 
   .notif-row {
-    padding: 6px 10px;
+    padding: 8px 12px;
     cursor: pointer;
     font-size: 0.9rem;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid rgba(30, 58, 138, 0.1);
+    color: #e2e8f0;
+    transition: background-color 0.2s ease;
   }
-  .notif-row:last-child { border-bottom: none; }
-
-  /* urgency colors */
-  .notif-row.ok      { background: #e7f9ef; }   /* light green */
-  .notif-row.due     { background: #fff4e5; }   /* light orange */
-  .notif-row.overdue { background: #fdecea; }   /* light red  */
-
-  .notif-row:hover { background: #ddd; }
-
-  .header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+  .notif-row:last-child {
+    border-bottom: none;
   }
-  .edit-cats-btn {
-    background: none;
-    border: none;
-    font-size: 1rem;
-    cursor: pointer;
-    opacity: 0.7;
+  .notif-row:hover {
+    background: rgba(59, 130, 246, 0.1);
   }
-  .edit-cats-btn:hover { opacity: 1; }
+
+  /* Urgency colors adjusted to theme */
+  .notif-row.ok {
+    background: rgba(72, 187, 120, 0.1);
+    border-left: 3px solid #48bb78;
+  }
+  .notif-row.due {
+    background: rgba(234, 179, 8, 0.1);
+    border-left: 3px solid #eab308;
+  }
+  .notif-row.overdue {
+    background: rgba(239, 68, 68, 0.1);
+    border-left: 3px solid #ef4444;
+  }
 
 </style>
 
 <div class="page">
   <div class="header">
-    <h1>Edit Categories</h1>
+    <h1>Edit Categories ✏️</h1>
     <button
       class="edit-cats-btn"
       on:click={openEditCategories}
       title="Edit categories"
-    >✏️</button>
+    ></button>
   </div>
 
   {#if showEditCategories}
@@ -594,11 +763,11 @@
     {/each}
   </div>
 
-  <div style="display: flex; align-items: center; gap: 8px;">
-    <button class="input-field" on:click={openCalculator}>
+  <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 1rem;">
+    <button class="input-field action-button" on:click={openCalculator}>
       🧮 Open Calculator
     </button>
-    <button class="input-field" on:click={openCamera}>📷 Scan receipt</button>
+    <button class="input-field action-button" on:click={openCamera}>📷 Scan receipt</button>
     <QuickSpeechEntry on:spoken={handleSpeech}/>
     <CalculatorModal
       visible={showCalc}
@@ -608,24 +777,28 @@
     />
   </div>
 
-  <input
-    type="number"
-    bind:value={amount}
-    placeholder="Enter amount"
-    class="input-field"
-  />
+  <div class="input-group">
+    <input
+      type="number"
+      bind:value={amount}
+      placeholder="Enter amount"
+      class="input-field"
+    />
+  </div>
 
- <div style="display:flex; gap:8px; margin-top:4px;">
+ <div style="display:flex; gap:8px; margin-top:4px; margin-bottom: 1rem;">
     <button class="round-btn" on:click={() => stepFive('down')}>‹</button>
     <button class="round-btn" on:click={() => stepFive('up')}>›</button>
   </div>
 
-  <textarea
-    bind:value={description}
-    placeholder="Add a note (optional)"
-    class="input-field"
-    rows="3"
-  />
+  <div class="input-group">
+    <textarea
+      bind:value={description}
+      placeholder="Add a note (optional)"
+      class="input-field"
+      rows="3"
+    />
+  </div>
 
   <button on:click={submit} class="submit-btn" disabled={submitting}>
     {submitting ? 'Submitting...' : 'Submit'}

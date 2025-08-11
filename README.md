@@ -1,38 +1,60 @@
-# sv
+- **<FileName>**
+  - **Purpose** <what it does, one sentence>
+  - **Exports** <functions / types>  (omit or write “—” if none)
+  - **Used by** <caller list>
+  - **Calls / Depends on** <key helpers, stores, or libraries>
+  - **Props** <key reactive props or events>  (UI components only)
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+---
 
-## Creating a project
+## Shared data & helpers (`src/lib/budgeting/`)
 
-If you're seeing this, you've probably already done this step. Congrats!
+- **defaults.ts**  
+  - **Purpose** Holds the built-in category sets (expense & income) and a helper to fetch them by account type.  
+  - **Exports** `Category` (interface), `defaultCategoriesByType`, `getDefaultCategories()`  
+  - **Used by** `store.ts` (initial state), `db.ts` (fallback when no DB row), various UI components that need the master list.  
+  - **Calls / Depends on** — (pure constants)
 
-```bash
-# create a new project in the current directory
-npx sv create
+- **localNLP.ts**
+  - **Purpose** Offline helper that parses raw speech or OCR strings into `{ amount, category, subcategory, description }` so the expense form can pre-fill fields.
+  - **Exports** `localParse()` (main), internal `wordsToNumber()` utility.
+  - **Used by** `QuickSpeechEntry.svelte`, `CameraModal.svelte`, `routes/budgeting/+page.svelte`.
+  - **Calls / Depends on** — (pure functions)
 
-# create a new project in my-app
-npx sv create my-app
-```
 
-## Developing
+---
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
 
-```bash
-npm run dev
+## Server-side helpers (`src/lib/budgeting/server`)
 
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
+- **db.ts**  
+  - **Purpose** Data-access layer for the `user_category_prefs` table (reads & upserts a user’s custom category list).  
+  - **Exports** `getUserCategories`, `saveUserCategories`, `UserCategories` (type)  
+  - **Used by**  
+    - `routes/budgeting/api/user/categories/+server.ts` (GET & POST)  
+    - `routes/budgeting/+layout.server.ts` (initial load)  
+  - **Calls / Depends on** `$lib/supabaseClient`, `lib/budgeting/defaults`
 
-## Building
 
-To create a production version of your app:
+---
 
-```bash
-npm run build
-```
+## Client stores (`src/lib/budgeting/`)
 
-You can preview the production build with `npm run preview`.
+- **store.ts**  
+  - **Purpose** Single source of truth for accounts, currentAccount, and categories; hides all REST calls from the UI.  
+  - **Exports** Writable stores (`accounts`, `currentAccount`, `categories`, `rawPrefs`) and helper functions (`loadAccounts`, `createAccount`, `selectAccount`, `loadCategories`, `saveCategories`, `createCategory`).  
+  - **Used by** Sidebar, AddAccountModal, AddCategoryModal, CategoryManagementModal, and the main budgeting page.  
+  - **Calls / Depends on** Budgeting API routes (`/api/accounts`, `/api/user/categories`) and `getDefaultCategories()` from `defaults.ts`.  
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+---
+
+## UI components (`src/lib/budgeting/`)
+
+- **AddAccountModal.svelte**  
+  - **Purpose** Modal dialog for creating a new “account” (wallet, bank, cash, etc.).  
+  - **Exports** —  
+  - **Used by** `Sidebar.svelte` (opened from the “＋ Account” button)  
+  - **Calls / Depends on** `createAccount()` from `store.ts`  
+  - **Props** `open : boolean` (two-way bound to show / hide the modal)
+
+---

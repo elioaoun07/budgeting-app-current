@@ -1,3 +1,33 @@
+/* ──────────────────────────────────────────────────────────────
+   src/lib/budgeting/store.ts
+
+   Purpose ▸ Central Svelte store for budgeting state.
+             *Only this file* may talk to `/budgeting/api/*` from
+             client-side code; UI components subscribe to the stores.
+
+   Exports ▸
+     • Writable stores
+         – accounts          : Account[]
+         – currentAccount    : Account | null
+         – categories        : Category[]
+         – rawPrefs          : alias to categories (legacy)
+     • Async helpers
+         – loadAccounts()    – GET /api/accounts   → hydrate store
+         – createAccount()   – POST /api/accounts  → add & select
+         – selectAccount()   – manually switch currentAccount
+         – loadCategories()  – GET /api/user/categories
+         – saveCategories()  – POST /api/user/categories
+         – createCategory()  – convenience wrapper → saveCategories
+   Depends ▸ `getDefaultCategories()` (defaults.ts)
+
+   Used by ▸
+     • Sidebar.svelte              – account selector
+     • AddAccountModal.svelte      – calls createAccount()
+     • CategoryManagementModal.*   – reorder / delete categories
+     • AddCategoryModal.svelte     – calls createCategory()
+     • routes/budgeting/+page.svelte (expense form)
+───────────────────────────────────────────────────────────────── */
+
 import { writable, get } from 'svelte/store';
 import { getDefaultCategories } from './defaults';
 import type { Category } from './defaults';
