@@ -1,3 +1,26 @@
+<!--
+──────────────────────────────────────────────────────────────
+src/routes/budgeting/+page.svelte
+
+Purpose ▸ Main budgeting dashboard page.
+           Lets the user enter expenses, view allocations, see reminders, and manage categories.
+           Shows salary breakdown, category/subcategory selection, and quick entry tools.
+
+Exports ▸
+  • Svelte page – Budgeting dashboard
+
+Depends ▸
+  • $lib/budgeting/store – account/category stores, helpers
+  • $lib/budgeting/localNLP.js – localParse
+  • $lib/budgeting/* – modals and UI components
+  • $lib/icons/Icon.svelte – icon rendering
+
+Used in ▸
+  • Budgeting dashboard (main expense entry and overview)
+
+Notes   ▸ Responsive design, salary breakdown, reminders, quick entry (speech, OCR, calculator).
+──────────────────────────────────────────────────────────────
+-->
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { get } from 'svelte/store';
@@ -8,12 +31,15 @@
 	import SalaryModal from '$lib/budgeting/SalaryModal.svelte';
 	import RecurringModal from '$lib/budgeting/RecurringModal.svelte';
 	import QuickSpeechEntry from '$lib/budgeting/QuickSpeechEntry.svelte';
-	import { localParse } from '$lib/budgeting/localNLP.js';
+  import { localParse, updateKeywordMap } from '$lib/budgeting/localNLP.js';
 	import CameraModal from '$lib/budgeting/CameraModal.svelte';
 	import AddCategoryModal from '$lib/budgeting/AddCategoryModal.svelte';
+  import OtherSubcategoryItem from '$lib/budgeting/OtherSubcategoryItem.svelte';
 	import CategoryManagementModal from '$lib/budgeting/CategoryManagementModal.svelte';
 	import Icon from '$lib/icons/Icon.svelte';
-	import { categories, createCategory, saveCategories, rawPrefs } from '$lib/budgeting/store';
+  import { categories, createCategory, saveCategories, rawPrefs } from '$lib/budgeting/store';
+// Keep the keyword map in sync with categories
+$: updateKeywordMap($categories);
 	import type { Category } from '$lib/budgeting/defaults';
 
 	/* REACTIVE: current selected account ID */
@@ -137,6 +163,11 @@
 	let description = '';
 	let salary: number | null = null;
 	let submitting = false;
+
+  // optimistic UI helpers
+  let pendingCreates = {}; // record pending creation per category name
+  let newlyAdded: string[] = []; // subs just added for animation
+  let announcement = '';
 	let allocations: any[] = [];
 	let expenses: any[] = [];
 	let reminders: any[] = [];
@@ -368,6 +399,78 @@
 		alert((await res.json()).success ? 'Saved ✅' : 'Error ❌');
 	}
 
+  async function handleCreateSubcategory(payload: any) {
+   // payload may be a string (old API) or an event with .detail
+   const newSubName = typeof payload === 'string' ? payload : payload?.detail;
+   if (!selectedMain || !newSubName || !newSubName.trim()) return;
+   const trimmed = newSubName.trim();
+
+    // 1. Find the category in the local store ($categories)
+    const categoryToUpdateIndex = $categories.findIndex(c => c.name === selectedMain);
+    if (categoryToUpdateIndex === -1) {
+      console.error("Category not found in local store:", selectedMain);
+      alert("Error: Could not find category to update.");
+      return;
+    }
+
+    // 2. Update the local store's category object (optimistic)
+    const originalCategories = JSON.parse(JSON.stringify($categories));
+    const updatedCategories = [...$categories];
+    const categoryToUpdate = { ...updatedCategories[categoryToUpdateIndex] };
+    if (!categoryToUpdate.subs) categoryToUpdate.subs = [];
+
+    // Remove any stored 'Other' placeholder from persistence
+    categoryToUpdate.subs = categoryToUpdate.subs.filter(s => s.toLowerCase() !== 'other');
+
+    // Avoid duplicates (case-insensitive)
+    if (categoryToUpdate.subs.some(s => s.toLowerCase() === trimmed.toLowerCase())) {
+      // Already present — just select it
+      selectedSub = categoryToUpdate.subs.find(s => s.toLowerCase() === trimmed.toLowerCase())!;
+      announcement = `${selectedSub} selected`;
+      return;
+    }
+
+    // Optimistically insert new sub at end
+    categoryToUpdate.subs = [...categoryToUpdate.subs, trimmed];
+    updatedCategories[categoryToUpdateIndex] = categoryToUpdate;
+
+    // Apply optimistic update to store so UI updates immediately
+    try {
+      // set local store immediately for optimistic UI
+      saveCategories(updatedCategories); // note: saveCategories will also set the store after POST
+      // mark pending and animation
+      pendingCreates[selectedMain] = true;
+      newlyAdded.push(trimmed);
+      selectedSub = trimmed;
+      announcement = `${trimmed} added`;
+
+      // wait for save to complete (saveCategories already awaited the POST inside it in original impl)
+      // If saveCategories throws, it will be caught below — but since we didn't await it, we add a safety check
+      // For reliability, call the API directly to observe result
+      const res = await fetch(`/budgeting/api/user/categories?accountId=${encodeURIComponent(selectedAccountId)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedCategories)
+      });
+      if (!res.ok) throw new Error(await res.text());
+
+      // success: clear pending flag and remove animation after short delay
+      delete pendingCreates[selectedMain];
+      setTimeout(() => {
+        newlyAdded = newlyAdded.filter(s => s !== trimmed);
+      }, 700);
+    } catch (error) {
+      // rollback
+      console.error('Failed to save new subcategory:', error);
+      // restore previous categories
+      await saveCategories(originalCategories);
+      delete pendingCreates[selectedMain];
+      newlyAdded = newlyAdded.filter(s => s !== trimmed);
+      announcement = `Failed to add ${trimmed}`;
+      alert('Failed to save new subcategory. Please try again.');
+    }
+  }
+
 	async function handleSpeech(e) {
 		const text = e.detail;
 		/* DEBUG: show raw speech */
@@ -422,22 +525,20 @@
     font-size: 1.5rem;
   }
 
-  .edit-cats-btn {
-    background: none;
-    border: none;
-    font-size: 1rem;
+ .edit-cats-btn {
+    background: rgba(59, 130, 246, 0.12);
+    border: 1px solid rgba(59, 130, 246, 0.5);
+    color: #e2e8f0;
     cursor: pointer;
-    /* Match secondary text color */
-    color: #94a3b8;
-    opacity: 0.8;
-    transition: all 0.2s ease;
-    border-radius: 4px;
-    padding: 4px;
+    border-radius: 8px;
+    padding: 3px 10px;
+    line-height: 1.5;
+    font-size: 0.95rem;
+    transition: all .2s ease;
   }
   .edit-cats-btn:hover {
-    opacity: 1;
-    color: #e2e8f0;
-    background: rgba(59, 130, 246, 0.1);
+    background: rgba(59, 130, 246, 0.2);
+    box-shadow: 0 0 0 2px rgba(59,130,246,.25);
   }
 
   /* --- Category Icons --- */
@@ -503,11 +604,19 @@
     accent-color: #3b82f6; /* Blue color for the dot */
     width: 18px;
     height: 18px;
+    flex: none;
   }
-  .radio-list span {
-    /* Adjust font size and color */
+  .sub-text {
     font-size: 0.85rem;
     color: #94a3b8;
+    flex: 1;
+    padding-left: 6px;
+  }
+  .sub-meta {
+    font-size: 0.78rem;
+    color: #9ca3af;
+    margin-left: 8px;
+    white-space: nowrap;
   }
 
   /* --- Input Fields --- */
@@ -543,6 +652,32 @@
     color: #94a3b8;
     opacity: 1;
   }
+
+  /* Amount input with compact up/down controls */
+  .amount-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .amount-input { flex: 1; }
+  .amount-controls {
+    display: flex;
+    flex-direction: row; /* place buttons side-by-side */
+    gap: 6px;
+    align-items: center;
+  }
+  .compact-btn {
+    width: 36px;
+    height: 32px;
+    padding: 0;
+    border-radius: 8px;
+    border: 1px solid rgba(71,85,105,0.4);
+    background: rgba(30,41,59,0.7);
+    color: #cbd5e1;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  .compact-btn:hover { background: rgba(59,130,246,0.08); color: #e2e8f0; }
 
   /* Specific styles for action buttons that look like inputs */
   .action-button {
@@ -687,18 +822,21 @@
 </style>
 
 <div class="page">
-  <div class="header">
-    <h1>Edit Categories ✏️</h1>
+  <div class="header" style="display:flex; align-items:center; gap:8px;">
+    <h1>Edit Categories</h1>
     <button
       class="edit-cats-btn"
       on:click={openEditCategories}
       title="Edit categories"
-    ></button>
+      aria-label="Edit categories"
+    >
+      ✏️
+    </button>
   </div>
 
   {#if showEditCategories}
     <CategoryManagementModal
-      {categories}
+      categories={$categories}
       on:save={handleSaveCategories}
       on:cancel={handleCancelEdit}
     />
@@ -750,18 +888,25 @@
     {/each}
   </div>
   
-  <div class="radio-list">
-    {#each currentCat?.subs ?? [] as sub}
-      <label>
-        <input type="radio" bind:group={selectedSub} value={sub} />
-        {sub}
-        <span style="font-size:0.8em; color:gray;">
-          (Spent: ${getSpent(selectedMain, sub).toFixed(0)} – 
-          Allocated: ${getAllocation(selectedMain, sub).toFixed(0)})
-        </span>
-      </label>
-    {/each}
-  </div>
+   <div class="radio-list">
+        {#each currentCat?.subs ?? [] as sub}
+          <label class="sub-label">
+            <input class="sub-radio" name="subcategory" type="radio" bind:group={selectedSub} value={sub} />
+            <span class="sub-text">{sub}</span>
+            <span class="sub-meta">
+              (Spent: ${getSpent(selectedMain, sub).toFixed(0)} – Allocated: ${getAllocation(selectedMain, sub).toFixed(0)})
+            </span>
+          </label>
+        {/each}
+
+        <OtherSubcategoryItem
+          categoryName={selectedMain}
+          selected={selectedSub}
+          busy={!!pendingCreates[selectedMain]}
+          on:create={handleCreateSubcategory}
+          on:select={(e) => { selectedSub = e.detail; }}
+        />
+      </div>
 
   <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 1rem;">
     <button class="input-field action-button" on:click={openCalculator}>
@@ -777,18 +922,22 @@
     />
   </div>
 
+      <!-- accessibility announcements -->
+      <div aria-live="polite" class="sr-only">{announcement}</div>
   <div class="input-group">
-    <input
-      type="number"
-      bind:value={amount}
-      placeholder="Enter amount"
-      class="input-field"
-    />
-  </div>
-
- <div style="display:flex; gap:8px; margin-top:4px; margin-bottom: 1rem;">
-    <button class="round-btn" on:click={() => stepFive('down')}>‹</button>
-    <button class="round-btn" on:click={() => stepFive('up')}>›</button>
+    <div class="amount-row">
+      <input
+        type="number"
+        bind:value={amount}
+        placeholder="Enter amount"
+        class="input-field amount-input"
+        aria-label="Enter amount"
+      />
+      <div class="amount-controls" role="group" aria-label="Adjust amount">
+        <button class="compact-btn" on:click={() => stepFive('up')} aria-label="Increase by step" title="Increase">▲</button>
+        <button class="compact-btn" on:click={() => stepFive('down')} aria-label="Decrease by step" title="Decrease">▼</button>
+      </div>
+    </div>
   </div>
 
   <div class="input-group">

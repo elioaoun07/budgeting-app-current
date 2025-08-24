@@ -1,4 +1,25 @@
-<!-- src/lib/icons/Icon.svelte -->
+<!--
+──────────────────────────────────────────────────────────────
+src/lib/icons/Icon.svelte
+
+Purpose ▸ Renders SVG icons by name for use in the UI.
+           Provides a set of built-in icons for categories and actions.
+
+Exports ▸
+  • Svelte component – Icon
+    – Props: name, size, color
+  • icons – array of available icon names
+  • fetchSvg(name) – helper to get raw SVG markup
+
+Depends ▸
+  • Inline SVG markup (iconMap)
+
+Used in ▸
+  • Budgeting dashboard UI (category icons, actions)
+
+Notes   ▸ SVGs are injected as HTML, size and color are replaced dynamically.
+──────────────────────────────────────────────────────────────
+-->
 <script context="module" lang="ts">
   // 1) All your SVGs in one place:
   const iconMap: Record<string, string> = {
@@ -12,14 +33,13 @@
                 stroke-width="0.7" stroke-linecap="round" stroke-linejoin="round"
                 xmlns="http://www.w3.org/2000/svg">
         <path d="M4 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0m10 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0M6 8a1 1 0 0 0 0 2h4a1 1 0 1 0 0-2zM4.862 4.276 3.906 6.19a.51.51 0 0 0 .497.731c.91-.073 2.35-.17 3.597-.17s2.688.097 3.597.17a.51.51 0 0 0 .497-.731l-.956-1.913A.5.5 0 0 0 10.691 4H5.309a.5.5 0 0 0-.447.276"/>
-        <path d="M2.52 3.515A2.5 2.5 0 0 1 4.82 2h6.362c1 0 1.904.596 2.298 1.515l.792 1.848c.075.175.21.319.38.404.5.25.855.715.965 1.262l.335 1.679q.05.242.049.49v.413c0 .814-.39 1.543-1 1.997V13.5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5v-1.338c-1.292.048-2.745.088-4 .088s-2.708-.04-4-.088V13.5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5v-1.892c-.61-.454-1-1.183-1-1.997v-.413a2.5 2.5 0 0 1 .049-.49l.335-1.68c.11-.546.465-1.012.964-1.261a.8.8 0 0 0 .381-.404l.792-1.848ZM4.82 3a1.5 1.5 0 0 0-1.379.91l-.792 1.847a1.8 1.8 0 0 1-.853.904.8.8 0 0 0-.43.564L1.03 8.904a1.5 1.5 0 0 0-.03.294v.413c0 .796.62 1.448 1.408 1.484 1.555.07 3.786.155 5.592.155s4.037-.084 5.592-.155A1.48 1.48 0 0 0 15 9.611v-.413q0-.148-.03-.294l-.335-1.68a.8.8 0 0 0-.43-.563 1.8 1.8 0 0 1-.853-.904l-.792-1.848A1.5 1.5 0 0 0 11.18 3z"/>
+        <path d="M2.52 3.515A2.5 2.5 0 0 1 4.82 2h6.362c1 0 1.904.596 2.298 1.515l.792 1.848c.075.175.21.319.38.404.5.25.855.715.965 1.262l.335 1.679q.05.242.049.49v.413c0 .814-.39 1.543-1 1.997V13.5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5v-1.338c-1.292.048-2.745.088-4 .088s-2.708-.04-4-.088V13.5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5v-1.892c-.61-.454-1-1.183-1-1.997v-.413a2.5 2.5 0 0 1 .049-.49l.335-1.68c.11-.546.465-1.012.964-1.261a.8.8 0 0 0 .381-.404l.792-1.848ZM4.82 3a1.5 1.5 0 0 0-1.379.91l-.792 1.847a1.8 1.8 0 0 1-.853.904.8.8 0 0 0-.43.564L1.03 8.904a1.5 1.5 0 0 0-.03.294v.413c0 .796.62 1.448 1.408 1.484 1.555.07 3.786.155 5.592.155s4.037-.084 5.592-.155A1.48 1.48 0 0 0 15 9.611v-.413q 0-.148-.03-.294l-.335-1.68a.8.8 0 0 0-.43-.563 1.8 1.8 0 0 1-.853-.904l-.792-1.848A1.5 1.5 0 0 0 11.18 3z"/>
         </svg>`,
 
     Home: `<svg width="{size}" height="{size}" viewBox="0 0 16 16" fill="none" stroke="{color}"
                  stroke-width="0.7" stroke-linecap="round" stroke-linejoin="round"
                  xmlns="http://www.w3.org/2000/svg">
           <path d="M8.707 1.5a1 1 0 0 0-1.414 0L.646 8.146a.5.5 0 0 0 .708.708L2 8.207V13.5A1.5 1.5 0 0 0 3.5 15h9a1.5 1.5 0 0 0 1.5-1.5V8.207l.646.647a.5.5 0 0 0 .708-.708L13 5.793V2.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1.293zM13 7.207V13.5a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5V7.207l5-5z"/>
-            
           </svg>`,
 
     Film: `<svg width="{size}" height="{size}" viewBox="0 0 16 15.8" fill="none" stroke="{color}"
@@ -60,7 +80,7 @@
                      xmlns="http://www.w3.org/2000/svg">
             <path d="M4 10.781c.148 1.667 1.513 2.85 3.591 3.003V15h1.043v-1.216c2.27-.179 3.678-1.438 3.678-3.3 0-1.59-.947-2.51-2.956-3.028l-.722-.187V3.467c1.122.11 1.879.714 2.07 1.616h1.47c-.166-1.6-1.54-2.748-3.54-2.875V1H7.591v1.233c-1.939.23-3.27 1.472-3.27 3.156 0 1.454.966 2.483 2.661 2.917l.61.162v4.031c-1.149-.17-1.94-.8-2.131-1.718zm3.391-3.836c-1.043-.263-1.6-.825-1.6-1.616 0-.944.704-1.641 1.8-1.828v3.495l-.2-.05zm1.591 1.872c1.287.323 1.852.859 1.852 1.769 0 1.097-.826 1.828-2.2 1.939V8.73z"/>
           </svg>`,
-          
+
     Saving: `<svg width="{size}" height="{size}" viewBox="0 0 16 16" fill="none" stroke="{color}"
                     stroke-width="0.7" stroke-linecap="round" stroke-linejoin="round"
                      xmlns="http://www.w3.org/2000/svg">
@@ -95,15 +115,17 @@
        </svg>`;
 </script>
 
-<!-- 6) Inject SVG with real size/color -->
-{@html svg
+<!-- Scope any styles to this component by wrapping the injected SVG -->
+<span class="icon" aria-hidden="true">
+  {@html svg
     .replace(/\{size\}/g, size.toString())
     .replace(/\{color\}/g, color)
-}
+  }
+</span>
 
 <style>
-  /* Ensure the injected SVG scales properly */
-  :global(svg) {
+  /* Only affect SVGs injected by THIS component */
+  .icon :global(svg) {
     display: block;
   }
 </style>

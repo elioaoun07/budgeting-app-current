@@ -1,4 +1,5 @@
-<!-- ─────────────────────────────────────────────────────────────
+<!-- 
+─────────────────────────────────────────────────────────────
      src/lib/budgeting/AddAccountModal.svelte
 
   Purpose ▸ Small pop-up dialog that lets the user create a new 
@@ -17,7 +18,8 @@
   UX      ▸ Esc key closes the modal;  “Add” button is disabled until
             the Name field is non-blank.
             “Type” select chooses between Income / Expense accounts.
-───────────────────────────────────────────────────────────────── -->
+───────────────────────────────────────────────────────────────── 
+-->
 
 <script lang="ts">
 	import { createAccount } from './store';

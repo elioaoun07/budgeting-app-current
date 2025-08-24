@@ -1,3 +1,24 @@
+<!--
+──────────────────────────────────────────────────────────────
+src/lib/budgeting/QuickSpeechEntry.svelte
+
+Purpose ▸ Quick speech-to-text entry for budgeting.
+           Lets the user dictate an amount or note, converts speech to text,
+           and dispatches the recognized transcript.
+
+Exports ▸
+  • Svelte component – QuickSpeechEntry
+    – Events: 'spoken'
+
+Depends ▸
+  • browser SpeechRecognition API
+
+Used in ▸
+  • Budgeting dashboard UI (fast entry via voice)
+
+Notes   ▸ Button toggles listening, transcript shown after recognition.
+──────────────────────────────────────────────────────────────
+-->
 <script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte';
   const dispatch = createEventDispatcher();

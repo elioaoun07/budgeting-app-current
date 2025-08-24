@@ -1,4 +1,23 @@
+// ──────────────────────────────────────────────────────────────
 // src/routes/budgeting/api/categories/+server.ts
+//
+// Purpose ▸ API endpoints for fetching and creating budget categories.
+//            Handles GET (list categories) and POST (create category) requests.
+//
+// Exports ▸
+//   • GET  – returns array of categories for the current user/account
+//   • POST – creates a new category for the current user/account
+//
+// Depends ▸
+//   • $lib/supabaseClient – Supabase client
+//   • @sveltejs/kit – SvelteKit API helpers
+//
+// Used in ▸
+//   • Budgeting dashboard (category management)
+//
+// Notes   ▸ Requires user authentication via locals.user. Throws 400/500 on error.
+// ──────────────────────────────────────────────────────────────
+
 import type { RequestHandler } from '@sveltejs/kit';
 import { json, error as kitError } from '@sveltejs/kit';
 import { supabase } from '$lib/supabaseClient';

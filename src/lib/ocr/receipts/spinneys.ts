@@ -1,4 +1,22 @@
+// ──────────────────────────────────────────────────────────────
 // src/lib/ocr/receipts/spinneys.ts
+//
+// Purpose ▸ Parser for Spinneys receipts for OCR extraction.
+//            Detects Spinneys receipts and extracts the total amount in USD.
+//
+// Exports ▸
+//   • spinneys – ReceiptParser object
+//
+// Depends ▸
+//   • ./types – ReceiptParser type
+//
+// Used in ▸
+//   • OCR pipeline for receipts
+//
+// Notes   ▸ Matches “spinneys” with OCR slip tolerance, and “Rate USD” + “Total USD”.
+//           Extracts first “Total USD” value, handling decimal/thousands separators.
+// ──────────────────────────────────────────────────────────────
+
 import type { ReceiptParser } from './types';
 
 export const spinneys: ReceiptParser = {

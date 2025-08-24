@@ -1,4 +1,20 @@
 // ➜ src/hooks.server.ts
+// ──────────────────────────────────────────────────────────────
+// Purpose ▸ SvelteKit server hook for authentication and route protection.
+//            Loads user from Supabase session tokens, sets event.locals.user,
+//            and redirects based on authentication state.
+//
+// Depends ▸
+//   • @sveltejs/kit – SvelteKit types and redirect
+//   • $lib/supabaseClient – Supabase client
+//
+// Used in ▸
+//   • All server requests (route protection, user loading)
+//
+// Notes   ▸ Redirects unauthenticated users from /budgeting to /login.
+//           Redirects authenticated users away from /login.
+// ──────────────────────────────────────────────────────────────
+
 import type { Handle }     from '@sveltejs/kit';
 import { supabase }        from '$lib/supabaseClient';
 import { redirect }        from '@sveltejs/kit';

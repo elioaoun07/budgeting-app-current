@@ -1,3 +1,28 @@
+<!--
+──────────────────────────────────────────────────────────────
+src/lib/budgeting/Sidebar.svelte
+
+Purpose ▸ Sidebar panel for account and budgeting actions.
+           Lets the user switch accounts, add new accounts, and access main budgeting features.
+           Dispatches events for salary edit, recurring payments, receipt scanning, and category addition.
+
+Exports ▸
+  • Svelte component – Sidebar
+    – Props: visible, username
+    – Events: 'close', 'editsalary', 'addrecurring', 'requestAddCategory'
+
+Depends ▸
+  • Svelte transitions (slide)
+  • $app/navigation – for route changes
+  • ./store – accounts, currentAccount, selectAccount
+  • AddAccountModal.svelte – for account creation
+
+Used in ▸
+  • Budgeting dashboard UI (main navigation/sidebar)
+
+Notes   ▸ Modal overlays the page, closes on Escape or backdrop click.
+──────────────────────────────────────────────────────────────
+-->
 <script lang="ts">
   import { slide } from 'svelte/transition';
   import { goto } from '$app/navigation';

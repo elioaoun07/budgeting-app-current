@@ -1,2 +1,19 @@
+/*
+──────────────────────────────────────────────────────────────
+src/app.css
+
+Purpose ▸ Global styles for the budgeting app.
+           Imports Tailwind CSS and forms plugin for utility-first styling.
+
+Depends ▸
+  • tailwindcss
+  • @tailwindcss/forms
+
+Used in ▸
+  • All pages and components
+
+Notes   ▸ Custom styles can be added below.
+──────────────────────────────────────────────────────────────
+*/
 @import 'tailwindcss';
 @plugin '@tailwindcss/forms';

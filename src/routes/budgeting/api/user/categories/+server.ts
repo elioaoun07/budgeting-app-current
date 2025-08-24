@@ -1,3 +1,23 @@
+// ──────────────────────────────────────────────────────────────
+// src/routes/budgeting/api/user/categories/+server.ts
+//
+// Purpose ▸ API endpoints for fetching and saving the user's budget categories.
+//            Handles GET (list categories) and POST (overwrite categories) requests.
+//
+// Exports ▸
+//   • GET  – returns array of categories for the current user/account
+//   • POST – overwrites all categories for the current user/account
+//
+// Depends ▸
+//   • $lib/budgeting/server/db – getUserCategories, saveUserCategories
+//   • @sveltejs/kit – SvelteKit API helpers
+//
+// Used in ▸
+//   • Budgeting dashboard (category management)
+//
+// Notes   ▸ Requires user authentication via locals.user. Throws 400 on missing accountId.
+// ──────────────────────────────────────────────────────────────
+
 import type { RequestHandler } from '@sveltejs/kit';
 import { json, error as kitErr } from '@sveltejs/kit';
 import { getUserCategories, saveUserCategories }

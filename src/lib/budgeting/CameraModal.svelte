@@ -1,3 +1,26 @@
+<!--
+──────────────────────────────────────────────────────────────
+src/lib/budgeting/CameraModal.svelte
+
+Purpose ▸ Modal for capturing images from the user's camera and extracting text via OCR.
+           Lets the user scan receipts or documents, performs OCR using Tesseract.js,
+           and dispatches the recognized text.
+
+Exports ▸
+  • Svelte component – CameraModal
+    – Props: visible
+    – Events: 'result', 'close'
+
+Depends ▸
+  • Tesseract.js – for OCR
+  • browser MediaDevices API – for camera access
+
+Used in ▸
+  • Budgeting dashboard UI (receipt scanning, quick entry)
+
+Notes   ▸ Modal overlays the page, starts/stops camera on open/close, closes on backdrop click.
+──────────────────────────────────────────────────────────────
+-->
 <script lang="ts">
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
 

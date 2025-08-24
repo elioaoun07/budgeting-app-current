@@ -1,30 +1,30 @@
-// ──────────────────────────────────────────────────────────────
-// src/lib/budgeting/server/db.ts
-//
-// Purpose ▸ Typed helpers that read / write the **user_category_prefs**
-//           table.  They are the ONE AND ONLY place in the codebase
-//           that should touch a user’s customised category list.
-//           All UI or API code must go through these helpers.
-//
-// Exports ▸
-//   • type  UserCategories        – alias = Category[]
-//   • func  getUserCategories()   – SELECT categories             ⇢  returns [] if none
-//   • func  saveUserCategories()  – UPSERT full array (insert or update)
-//
-// Depends ▸
-//   • $lib/supabaseClient         – PostgREST connection
-//   • Category (type)             – from defaults.ts
-//
-// Used in ▸
-//   • routes/budgeting/api/user/categories/+server.ts
-//       – GET  → getUserCategories()
-//       – POST → saveUserCategories()
-//   • routes/budgeting/+layout.server.ts
-//       – Initial dashboard load to pre-hydrate the UI
-//
-// Notes   ▸ If getUserCategories() returns an empty array the client
-//           falls back to the hard-coded defaults in defaults.ts.
-// ──────────────────────────────────────────────────────────────
+/* ──────────────────────────────────────────────────────────────
+  src/lib/budgeting/server/db.ts
+ 
+  Purpose ▸ Typed helpers that read / write the **user_category_prefs**
+            table.  They are the ONE AND ONLY place in the codebase
+            that should touch a user’s customised category list.
+            All UI or API code must go through these helpers.
+ 
+  Exports ▸
+    • type  UserCategories        – alias = Category[]
+    • func  getUserCategories()   – SELECT categories             ⇢  returns [] if none
+    • func  saveUserCategories()  – UPSERT full array (insert or update)
+ 
+  Depends ▸
+    • $lib/supabaseClient         – PostgREST connection
+    • Category (type)             – from defaults.ts
+ 
+  Used in ▸
+    • routes/budgeting/api/user/categories/+server.ts
+        – GET  → getUserCategories()
+        – POST → saveUserCategories()
+    • routes/budgeting/+layout.server.ts
+        – Initial dashboard load to pre-hydrate the UI
+ 
+  Notes   ▸ If getUserCategories() returns an empty array the client
+            falls back to the hard-coded defaults in defaults.ts.
+  ────────────────────────────────────────────────────────────── */
 
 
 import { supabase } from '$lib/supabaseClient';

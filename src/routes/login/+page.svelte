@@ -1,3 +1,24 @@
+<!--
+──────────────────────────────────────────────────────────────
+src/routes/login/+page.svelte
+
+Purpose ▸ Login page for xPENDING budgeting app.
+           Lets the user sign in with email and password, shows animated quotes and particles.
+           Handles authentication, error feedback, and redirects to dashboard on success.
+
+Exports ▸
+  • Svelte page – Login
+
+Depends ▸
+  • $app/navigation – SvelteKit navigation helpers
+  • Svelte transitions/easing – for animations
+
+Used in ▸
+  • App entry (login)
+
+Notes   ▸ Animated background, typing quotes, error/success feedback, responsive design.
+──────────────────────────────────────────────────────────────
+-->
 <script lang="ts">
   import { invalidateAll } from '$app/navigation';
   import { onMount } from 'svelte';

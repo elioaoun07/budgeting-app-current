@@ -1,3 +1,26 @@
+<!--
+──────────────────────────────────────────────────────────────
+src/lib/budgeting/SalaryModal.svelte
+
+Purpose ▸ Modal for editing the user's salary.
+           Lets the user enter a monthly salary amount and save it.
+           Dispatches 'save' with the new salary and 'close' to close the modal.
+
+Exports ▸
+  • Svelte component – SalaryModal
+    – Props: visible, salary
+    – Events: 'save', 'close'
+
+Depends ▸
+  • Svelte createEventDispatcher
+  • Svelte transitions (fly, fade)
+
+Used in ▸
+  • Budgeting dashboard UI (salary entry/edit)
+
+Notes   ▸ Modal overlays the page, closes on backdrop click.
+──────────────────────────────────────────────────────────────
+-->
 <script lang="ts">
   import { fly, fade } from 'svelte/transition';
   import { createEventDispatcher } from 'svelte';

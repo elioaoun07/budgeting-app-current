@@ -1,3 +1,4 @@
+// TO BE REMOVED - NOT NEEDED GoogleSheets Integration
 import { GoogleSpreadsheet } from 'google-spreadsheet';
 import creds from '$lib/credentials.json';
 //import { SPREADSHEET_ID } from '$env/static/private';

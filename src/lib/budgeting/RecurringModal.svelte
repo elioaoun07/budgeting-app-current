@@ -1,3 +1,25 @@
+<!--
+──────────────────────────────────────────────────────────────
+src/lib/budgeting/RecurringModal.svelte
+
+Purpose ▸ Modal for creating a new recurring payment or bill.
+           Lets the user enter category, amount, frequency, next date, and reminder options.
+           Dispatches 'save' with payment details and 'close' to close the modal.
+
+Exports ▸
+  • Svelte component – RecurringModal
+    – Props: visible
+    – Events: 'save', 'close'
+
+Depends ▸
+  • Svelte createEventDispatcher
+
+Used in ▸
+  • Budgeting dashboard UI (recurring payments/bills)
+
+Notes   ▸ Modal overlays the page, closes on backdrop click.
+──────────────────────────────────────────────────────────────
+-->
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   export let visible = false;

@@ -1,3 +1,25 @@
+<!--
+──────────────────────────────────────────────────────────────
+src/lib/budgeting/ScheduledPopup.svelte
+
+Purpose ▸ Popup reminder for scheduled payments.
+           Shows category, subcategory, amount, and next payment date.
+           Lets the user confirm payment or cancel.
+
+Exports ▸
+  • Svelte component – ScheduledPopup
+    – Props: item (category, subcategory, amount, nextDate)
+    – Events: 'confirm', 'close'
+
+Depends ▸
+  • Svelte createEventDispatcher
+
+Used in ▸
+  • Budgeting dashboard UI (scheduled payment reminders)
+
+Notes   ▸ Modal overlays the page, closes on backdrop click.
+──────────────────────────────────────────────────────────────
+-->
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   export let item: {

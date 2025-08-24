@@ -1,16 +1,38 @@
-<!-- src/routes/+layout.svelte -->
+<!--
+──────────────────────────────────────────────────────────────
+src/routes/budgeting/+layout.svelte
+
+Purpose ▸ Main layout for budgeting dashboard.
+           Provides navigation, welcome animation, floating particles background,
+           and slots for page content. Handles account/category loading and logout.
+
+Exports ▸
+  • Svelte layout – Budgeting dashboard shell
+
+Depends ▸
+  • $lib/budgeting/store – account/category stores
+  • Svelte transitions/easing – for animations
+
+Used in ▸
+  • All budgeting dashboard pages
+
+Notes   ▸ Responsive design, mobile sidebar, animated welcome, improved input/button styles.
+──────────────────────────────────────────────────────────────
+-->
 <script lang="ts">
   import { onMount } from 'svelte';
   import { loadAccounts, loadCategories, currentAccount } from '$lib/budgeting/store';
   import { quintOut } from 'svelte/easing';
   import { fade, fly } from 'svelte/transition';
-  
+  import { supabase } from '$lib/supabaseClient';
+
   export let data; // { user, initialPrefs, accounts }
 
   let showWelcome = true;
   let particles = [];
   let navOpen = false;
   let isMobile = false;
+  let showUserMenu = false; // New state for user menu
 
   // Initialize floating particles
   onMount(() => {
@@ -44,12 +66,64 @@
     navOpen = !navOpen;
   }
 
-  function logout() {
-    // Implement your logout logic here, e.g., calling a Supabase logout function
-    // Example:
-    // import { supabase } from '$lib/supabaseClient';
-    // await supabase.auth.signOut();
-    // Then redirect or reload
+  // Toggle user menu visibility
+  function toggleUserMenu() {
+    showUserMenu = !showUserMenu;
+  }
+
+  // Close user menu when clicking outside
+  function handleClickOutside(event) {
+    if (showUserMenu && !document.getElementById('user-menu-container')?.contains(event.target)) {
+      showUserMenu = false;
+    }
+  }
+
+  // Add event listener for outside clicks
+  onMount(() => {
+    document.addEventListener('click', handleClickOutside);
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+    };
+  });
+
+  async function logout() {
+    // Best-effort server-side logout first (clears server session cookies)
+    try {
+      await fetch('/logout', { method: 'POST', credentials: 'same-origin' });
+    } catch (err) {
+      // Non-fatal: log and continue to client-side sign-out
+      console.warn('Server logout request failed (continuing):', err);
+    }
+
+    try {
+      // Sign out from Supabase (client session)
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('Supabase logout error:', error);
+      }
+    } catch (error) {
+      console.error('Supabase signOut failed:', error);
+    } finally {
+      // Close the user menu and force navigation to the login page.
+      // Use replace so logout doesn't remain in history.
+      showUserMenu = false;
+      try {
+        window.location.replace('/login');
+      } catch (e) {
+        // Fallback to href assignment
+        window.location.href = '/login';
+      }
+    }
+  }
+
+  async function help() {
+    // Close the user menu and navigate to the help page.
+    showUserMenu = false;
+    try {
+      window.location.replace('/help');
+    } catch (e) {
+      window.location.href = '/help';
+    }
   }
 </script>
 
@@ -100,14 +174,36 @@
     </div>
     
     <div class="nav-right">
-      <div class="user-info">
+      <div class="user-info" id="user-menu-container">
         <span class="user-name">{data.user?.email?.split('@')[0] ?? 'User'}</span>
-        <div class="user-avatar">
+        <div class="user-avatar" on:click={toggleUserMenu} role="button" aria-label="User menu">
           <svg viewBox="0 0 24 24" fill="none">
             <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2"/>
             <path d="M5 20C5 16.134 8.13401 13 12 13C15.866 13 19 16.134 19 20" stroke="currentColor" stroke-width="2"/>
           </svg>
         </div>
+        
+        <!-- User dropdown menu -->
+        {#if showUserMenu}
+          <div class="user-menu" out:fly={{ y: 10, duration: 200 }}>
+            <button class="user-menu-item" on:click={help}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" />
+                <path d="M9.09 9a3 3 0 1 1 5.82 1c-.26.78-.92 1.07-1.82 1.72C12.6 12.88 12 13.5 12 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M12 18h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              Help
+            </button>
+            <button class="user-menu-item" on:click={logout}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M9 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M16 17L21 12L16 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M21 12H9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              Logout
+            </button>
+          </div>
+        {/if}
       </div>
     </div>
   </header>
@@ -125,16 +221,16 @@
     
     <ul class="nav-menu">
       <li class="nav-item active">
-        <a href="/dashboard" class="nav-link">
+        <a href="/budgeting" class="nav-link">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
             <path d="M3 9L12 2L21 9V20C21 20.5304 20.7893 21.0391 20.4142 21.4142C20.0391 21.7893 19.5304 22 19 22H5C4.46957 22 3.96086 21.7893 3.58579 21.4142C3.21071 21.0391 3 20.5304 3 20V9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             <path d="M9 22V12H15V22" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
-          Dashboard
+          Transactions
         </a>
       </li>
       <li class="nav-item">
-        <a href="/transactions" class="nav-link">
+        <a href="/dashboard" class="nav-link">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
             <path d="M16 4H21V9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             <path d="M21 4L14 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -142,10 +238,10 @@
             <path d="M16 20H21V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             <path d="M4 4H9V9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
-          Transactions
+          Dashboard
         </a>
       </li>
-      <li class="nav-item">
+      <!-- <li class="nav-item">
         <a href="/budgets" class="nav-link">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
             <path d="M9 17V11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -178,13 +274,13 @@
       <li class="nav-item">
         <a href="/settings" class="nav-link">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-            <!-- Simplified settings icon -->
+             Simplified settings icon
             <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
             <path d="M19.4 15C19.2667 15.2667 19.36 15.8 19.7 16.2C20.04 16.6 20.5667 16.7333 21 16.5C21.4333 16.2667 21.7333 15.8667 21.8 15.4C21.8667 14.9333 21.7333 14.5 21.4 14.2C21.0667 13.9 20.5667 13.7667 20 13.8C19.4333 13.8333 19 14.0333 18.7 14.4C18.4 14.7667 18.2667 15.2 18.3 15.7C18.3333 16.2 18.5333 16.6333 18.9 16.9C19.2667 17.1667 19.7 17.2667 20.2 17.2C20.7 17.1333 21.1333 16.9 21.4 16.5C21.6667 16.1 21.7667 15.6333 21.7 15.1C21.6333 14.5667 21.4 14.1333 21 13.8C20.6 13.4667 20.1333 13.2667 19.6 13.2C19.0667 13.1333 18.6 13.2333 18.2 13.5C17.8 13.7667 17.5333 14.1667 17.4 14.7C17.2667 15.2333 17.3333 15.7667 17.6 16.2C17.8667 16.6333 18.2667 16.9333 18.8 17C19.3333 17.0667 19.8333 16.9667 20.3 16.7C20.7667 16.4333 21.1333 16.0333 21.4 15.5C21.6667 14.9667 21.7667 14.4 21.7 13.8C21.6333 13.2 21.4 12.6667 21 12.2C20.6 11.7333 20.1 11.4333 19.5 11.3C18.9 11.1667 18.3 11.2333 17.7 11.5C17.1 11.7667 16.6333 12.1667 16.3 12.7C15.9667 13.2333 15.8333 13.8333 15.9 14.5C15.9667 15.1667 16.2333 15.7667 16.7 16.2C17.1667 16.6333 17.7333 16.9 18.4 16.9C19.0667 16.9 19.6333 16.6333 20.1 16.1C20.5667 15.5667 20.8 14.9667 20.8 14.3" stroke="currentColor" stroke-width="2"/>
           </svg>
           Settings
         </a>
-      </li>
+      </li> -->
     </ul>
     
     <div class="nav-footer">
@@ -305,7 +401,7 @@
     font-family: 'Space Grotesk', sans-serif;
   }
 
- .app-name-light {
+  .app-name-light {
     font-weight: 300;
     color: #94a3b8;
     opacity: 0.7;
@@ -321,11 +417,6 @@
     background-clip: text;
     color: transparent;
     font-family: 'Space Grotesk', sans-serif;
-  }
-
-  .light {
-    font-weight: 300;
-    opacity: 0.7;
   }
 
   .welcome-subtitle {
@@ -400,6 +491,7 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
+    position: relative;
   }
 
   .user-name {
@@ -417,12 +509,51 @@
     align-items: center;
     justify-content: center;
     padding: 2px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .user-avatar:hover {
+    transform: scale(1.05);
   }
 
   .user-avatar svg {
     width: 100%;
     height: 100%;
     color: white;
+  }
+
+  /* User dropdown menu */
+  .user-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 0.5rem;
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid rgba(30, 58, 138, 0.3);
+    border-radius: 8px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    min-width: 150px;
+    z-index: 1000;
+    backdrop-filter: blur(10px);
+  }
+
+  .user-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: none;
+    border: none;
+    color: #e2e8f0;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .user-menu-item:hover {
+    background: rgba(59, 130, 246, 0.15);
   }
 
   .side-nav {
@@ -581,7 +712,7 @@
   }
 
   /* Buttons within forms */
-  .main-content button:not(.nav-link, .menu-button, .logout-button) {
+  .main-content button:not(.nav-link, .menu-button, .logout-button, .user-menu-item) {
     /* Target buttons that are not part of the nav */
     width: 100%;
     background: linear-gradient(135deg, #1e3a8a, #3b82f6); /* Consistent with login */
@@ -597,18 +728,18 @@
     box-shadow: 0 4px 6px rgba(30, 58, 138, 0.2); /* Subtle shadow */
   }
 
-  .main-content button:not(.nav-link, .menu-button, .logout-button):hover {
+  .main-content button:not(.nav-link, .menu-button, .logout-button, .user-menu-item):hover {
     background: linear-gradient(135deg, #2c5282, #4299e1); /* Slightly different gradient on hover */
     transform: translateY(-2px); /* Subtle lift */
     box-shadow: 0 6px 8px rgba(30, 58, 138, 0.3); /* Enhanced shadow */
   }
 
-  .main-content button:not(.nav-link, .menu-button, .logout-button):active {
+  .main-content button:not(.nav-link, .menu-button, .logout-button, .user-menu-item):active {
     transform: translateY(0); /* Reset on click */
     box-shadow: 0 2px 4px rgba(30, 58, 138, 0.2); /* Reduced shadow */
   }
 
-  .main-content button:not(.nav-link, .menu-button, .logout-button):disabled {
+  .main-content button:not(.nav-link, .menu-button, .logout-button, .user-menu-item):disabled {
     opacity: 0.6;
     cursor: not-allowed;
     transform: none;

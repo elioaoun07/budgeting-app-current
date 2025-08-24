@@ -1,3 +1,23 @@
+// ──────────────────────────────────────────────────────────────
+// src/routes/budgeting/+layout.server.ts
+//
+// Purpose ▸ Loads user, accounts, and initial categories for budgeting pages.
+//            Provides authenticated user info, account list, and categories for the first account.
+//
+// Exports ▸
+//   • load – LayoutServerLoad function
+//
+// Depends ▸
+//   • $lib/supabaseClient – Supabase client
+//   • $lib/budgeting/server/db – getUserCategories
+//   • $lib/budgeting/defaults – getDefaultCategories
+//
+// Used in ▸
+//   • Budgeting dashboard layout
+//
+// Notes   ▸ Falls back to default categories if user/account/categories missing.
+// ──────────────────────────────────────────────────────────────
+
 import type { LayoutServerLoad } from './$types';
 import { supabase }              from '$lib/supabaseClient';
 import { getUserCategories }     from '$lib/budgeting/server/db';

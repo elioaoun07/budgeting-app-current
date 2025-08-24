@@ -1,3 +1,24 @@
+<!--
+──────────────────────────────────────────────────────────────
+src/routes/budgeting/receipt/+page.svelte
+
+Purpose ▸ Receipt scanning page for budgeting.
+           Lets the user upload a receipt image, runs OCR, and parses the total amount.
+           Shows the detected store and extracted amount, or an error message.
+
+Exports ▸
+  • Svelte page – Receipt scanner
+
+Depends ▸
+  • $lib/ocr/engine – OCR extraction
+  • $lib/ocr/receipts – receipt parsers
+
+Used in ▸
+  • Budgeting dashboard (receipt scanning)
+
+Notes   ▸ Uses device camera if available. Shows feedback and errors.
+──────────────────────────────────────────────────────────────
+-->
 <script lang="ts">
   import { recognise }      from '$lib/ocr/engine';
   import { receiptParsers } from '$lib/ocr/receipts';
@@ -31,7 +52,7 @@
 
 <h2>Scan a receipt</h2>
 
-<input type="file" accept="image/*" bind:files={files}/>
+<input type="file" accept="image/*"  capture="environment" bind:files={files}/>
 <button on:click={scan}>Scan</button>
 
 <p>{msg}</p>

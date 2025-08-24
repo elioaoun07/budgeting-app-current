@@ -1,4 +1,23 @@
+// ──────────────────────────────────────────────────────────────
 // src/routes/budgeting/api/accounts/+server.ts
+//
+// Purpose ▸ API endpoints for fetching and creating user accounts.
+//            Handles GET (list accounts) and POST (create account) requests.
+//
+// Exports ▸
+//   • GET  – returns array of accounts for the current user
+//   • POST – creates a new account for the current user
+//
+// Depends ▸
+//   • $lib/supabaseClient – Supabase client
+//   • @sveltejs/kit – SvelteKit API helpers
+//
+// Used in ▸
+//   • Budgeting dashboard (account management)
+//
+// Notes   ▸ Requires user authentication via locals.user.
+// ──────────────────────────────────────────────────────────────
+
 import type { RequestHandler } from './$types';
 import { json }                from '@sveltejs/kit';
 import { supabase }            from '$lib/supabaseClient';

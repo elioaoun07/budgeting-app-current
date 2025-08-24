@@ -1,4 +1,22 @@
-// ➜ src/routes/login/+server.ts
+// ──────────────────────────────────────────────────────────────
+// src/routes/login/+server.ts
+//
+// Purpose ▸ Handles login requests for xPENDING budgeting app.
+//            Authenticates user with Supabase, sets session cookies, and redirects.
+//
+// Exports ▸
+//   • POST – authenticates user and redirects to dashboard
+//
+// Depends ▸
+//   • $lib/supabaseClient – Supabase client
+//   • @sveltejs/kit – SvelteKit API helpers
+//
+// Used in ▸
+//   • Login page
+//
+// Notes   ▸ Stores access/refresh tokens in cookies. Redirects on success.
+// ──────────────────────────────────────────────────────────────
+
 import type { RequestHandler } from '@sveltejs/kit';
 import { json, redirect }       from '@sveltejs/kit';
 import { supabase }             from '$lib/supabaseClient';

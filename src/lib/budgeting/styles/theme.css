@@ -1,0 +1,22 @@
+:root[data-theme='wood'] {
+  /* Palette */
+  --bg: #f8f9fa;
+  --bg-elev: #ffffff;
+  --fg: #343a40;
+  --primary: #495057;
+  --primary-hover: #343a40;
+}
+
+:root[data-theme='blue'] {
+  --bg: #0a0f1c;
+  --bg-elev: rgba(15,23,42,.85);
+  --fg: #e2e8f0;
+  --primary: #1e3a8a;
+  --primary-hover: #3b82f6;
+}
+
+/* Example generic usages that every component inherits */
+body            { background: var(--bg);  color: var(--fg); }
+button          { background: var(--primary); color:#fff;   }
+button:hover    { background: var(--primary-hover); }
+.card, .modal   { background: var(--bg-elev); }
