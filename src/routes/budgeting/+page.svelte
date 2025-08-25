@@ -24,7 +24,8 @@ Notes   ▸ Responsive design, salary breakdown, reminders, quick entry (speech,
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { get } from 'svelte/store';
-	import { currentAccount } from '$lib/budgeting/store';
+  import { fly, fade } from "svelte/transition";
+	import { currentAccount, accounts, selectAccount, loadAccounts } from '$lib/budgeting/store';
 	import CalculatorModal from '$lib/budgeting/CalculatorModal.svelte';
 	import ScheduledPopup from '$lib/budgeting/ScheduledPopup.svelte';
 	import Sidebar from '$lib/budgeting/Sidebar.svelte';
@@ -92,9 +93,64 @@ $: updateKeywordMap($categories);
 	function handleCancel() { showAddModal = false; }
 
 	let showEditCategories = false;
+	let showAccountDropdown = false;
+
+	// Load accounts on mount
+	onMount(async () => {
+		try {
+			await loadAccounts();
+		} catch (error) {
+			console.error('Failed to load accounts:', error);
+		}
+
+		// Click outside handler for account dropdown
+		const handleClickOutside = (event: MouseEvent) => {
+			if (showAccountDropdown && !event.target?.closest?.('.account-switcher')) {
+				showAccountDropdown = false;
+			}
+		};
+
+		// Listen for custom events from navigation
+		const handleNavigationAddCategory = () => {
+			handleRequestAddCategory();
+		};
+
+		const handleNavigationAddAccount = () => {
+			// Open the sidebar which contains the Add Account functionality
+			showSidebar = true;
+		};
+
+		document.addEventListener('click', handleClickOutside);
+		window.addEventListener('requestAddCategory', handleNavigationAddCategory);
+		window.addEventListener('requestAddAccount', handleNavigationAddAccount);
+		
+		return () => {
+			document.removeEventListener('click', handleClickOutside);
+			window.removeEventListener('requestAddCategory', handleNavigationAddCategory);
+			window.removeEventListener('requestAddAccount', handleNavigationAddAccount);
+		};
+	});
 
 	function openEditCategories() {
 		showEditCategories = true;
+	}
+
+	function toggleAccountDropdown() {
+		showAccountDropdown = !showAccountDropdown;
+	}
+
+	function handleAccountSelect(accountId: string) {
+		selectAccount(accountId);
+		showAccountDropdown = false;
+	}
+
+	function handleAccountKeydown(event: KeyboardEvent) {
+		if (event.key === 'Escape') {
+			showAccountDropdown = false;
+		} else if (event.key === 'Enter' || event.key === ' ') {
+			event.preventDefault();
+			toggleAccountDropdown();
+		}
 	}
 
 	function handleSaveCategories(event: CustomEvent<string[]>) {
@@ -130,6 +186,33 @@ $: updateKeywordMap($categories);
 		);
 		saveCategories(reordered);
 	}
+
+  let featureInProgress = true;
+  let showToast = false;
+  let toastText = "🚧 Feature in progress";
+
+  function showHelpToast(message = "🚧 Feature in progress") {
+    toastText = message;
+    showToast = true;
+    clearTimeout(showHelpToast._t);
+    showHelpToast._t = setTimeout(() => (showToast = false), 2600);
+  }
+
+  function handleAction(action, inProgressMessage) {
+    if (featureInProgress) {
+      showHelpToast(inProgressMessage ?? "🚧 Feature in progress");
+      return;
+    }
+    action?.();
+  }
+
+  // Block keyboard activation when aria-disabled
+  function blockIfDisabled(event) {
+    if (featureInProgress && (event.key === "Enter" || event.key === " ")) {
+      event.preventDefault();
+      showHelpToast();
+    }
+  }
 
 	// const categoryDefinitions = {
 	//   Shopping: ['Supermarket', 'Home utilities'],
@@ -502,116 +585,818 @@ $: updateKeywordMap($categories);
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-  /* --- Updated Styles to Match Main Layout --- */
+  /* Design System Variables - Expert Level */
+  :root {
+    /* Color Palette - Sophisticated Dark Theme */
+    --color-bg-primary: rgba(15, 23, 42, 0.95);
+    --color-bg-card: rgba(30, 41, 59, 0.8);
+    --color-bg-glass: rgba(15, 23, 42, 0.98);
+    --color-bg-elevated: rgba(51, 65, 85, 0.6);
+    --color-bg-input: rgba(30, 41, 59, 0.9);
+    --color-border-subtle: rgba(71, 85, 105, 0.2);
+    --color-border-accent: rgba(59, 130, 246, 0.4);
+    --color-border-focus: rgba(59, 130, 246, 0.6);
+    
+    /* Brand Colors */
+    --color-primary: #3b82f6;
+    --color-primary-hover: #2563eb;
+    --color-primary-light: rgba(59, 130, 246, 0.15);
+    --color-primary-dark: rgba(59, 130, 246, 0.8);
+    
+    /* Semantic Colors */
+    --color-success: #10b981;
+    --color-success-light: rgba(16, 185, 129, 0.1);
+    --color-warning: #f59e0b;
+    --color-warning-light: rgba(245, 158, 11, 0.1);
+    --color-error: #ef4444;
+    --color-error-light: rgba(239, 68, 68, 0.1);
+    
+    /* Typography */
+    --color-text-primary: #f8fafc;
+    --color-text-secondary: #e2e8f0;
+    --color-text-muted: #94a3b8;
+    --color-text-inverse: #1e293b;
+    
+    /* Elevation System */
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1), 0 4px 6px rgba(0, 0, 0, 0.05);
+    --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.1), 0 10px 10px rgba(0, 0, 0, 0.04);
+    --shadow-2xl: 0 25px 50px rgba(0, 0, 0, 0.25);
+    
+    /* Border Radius System */
+    --radius-xs: 4px;
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --radius-2xl: 20px;
+    --radius-full: 9999px;
+    
+    /* Spacing System */
+    --spacing-0: 0px;
+    --spacing-1: 4px;
+    --spacing-2: 8px;
+    --spacing-3: 12px;
+    --spacing-4: 16px;
+    --spacing-5: 20px;
+    --spacing-6: 24px;
+    --spacing-8: 32px;
+    --spacing-10: 40px;
+    --spacing-12: 48px;
+    --spacing-16: 64px;
+    
+    /* Animation Curves */
+    --ease-out-cubic: cubic-bezier(0.33, 1, 0.68, 1);
+    --ease-in-out-cubic: cubic-bezier(0.65, 0, 0.35, 1);
+    --ease-spring: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  }
 
+  /* --- Expert-Level Page Container --- */
   .page {
-    /* Inherit font from main layout */
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    max-width: 600px;
-    margin: auto;
-    padding: 20px;
-    /* Match the main content background slightly */
-    background: rgba(15, 23, 42, 0.3);
-    border-radius: 12px;
-    margin-top: 80px; /* Space for fixed header elements */
-    margin-bottom: 20px;
+    max-width: 100%;
+    margin: 0;
+    padding: var(--spacing-4);
+    background: var(--color-bg-glass);
+    backdrop-filter: blur(24px);
+    border-radius: 0;
+    margin-top: 60px;
+    margin-bottom: 0;
+    min-height: calc(100vh - 60px);
+    animation: pageEntrance 0.8s var(--ease-out-cubic);
+    position: relative;
+  }
+
+  /* Desktop Enhancement */
+  @media (min-width: 768px) {
+    .page {
+      max-width: 1000px;
+      margin: var(--spacing-6) auto;
+      padding: var(--spacing-8);
+      border: 1px solid var(--color-border-subtle);
+      border-radius: var(--radius-2xl);
+      margin-top: 100px;
+      margin-bottom: var(--spacing-8);
+      min-height: auto;
+      box-shadow: var(--shadow-2xl);
+    }
+  }
+
+  @keyframes pageEntrance {
+    from { 
+      opacity: 0; 
+      transform: translateY(30px) scale(0.98);
+    }
+    to { 
+      opacity: 1; 
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  /* --- Expert Header Design --- */
+  .header {
+    display: flex; 
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-2);
+    margin-bottom: var(--spacing-6);
+    padding: var(--spacing-5);
+    background: var(--color-bg-elevated);
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--color-border-subtle);
+    backdrop-filter: blur(16px);
+    position: relative;
+    overflow: visible;
+    z-index: 1000;
+  }
+
+  .header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
+    opacity: 0.5;
+  }
+
+  .header-right {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-3);
+    width: 100%;
+    align-items: stretch;
+  }
+
+  @media (min-width: 480px) {
+    .header-right {
+      flex-direction: row;
+      align-items: center;
+      width: auto;
+      gap: var(--spacing-3);
+    }
   }
 
   .header h1 {
-    /* Match page title color and weight */
-    color: #e2e8f0;
-    font-weight: 600;
-    margin: 0 0 1rem 0;
-    font-size: 1.5rem;
+    color: var(--color-text-primary);
+    font-weight: 800;
+    margin: 0;
+    font-size: 1.75rem;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, var(--color-text-primary), var(--color-primary));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
 
- .edit-cats-btn {
-    background: rgba(59, 130, 246, 0.12);
-    border: 1px solid rgba(59, 130, 246, 0.5);
-    color: #e2e8f0;
-    cursor: pointer;
-    border-radius: 8px;
-    padding: 3px 10px;
-    line-height: 1.5;
-    font-size: 0.95rem;
-    transition: all .2s ease;
-  }
-  .edit-cats-btn:hover {
-    background: rgba(59, 130, 246, 0.2);
-    box-shadow: 0 0 0 2px rgba(59,130,246,.25);
+  .header-subtitle {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    margin: 0;
+    font-weight: 400;
+    opacity: 0.8;
   }
 
-  /* --- Category Icons --- */
-  .cat-icons {
+  /* Desktop header enhancement */
+  @media (min-width: 768px) {
+    .header {
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--spacing-6) var(--spacing-8);
+    }
+
+    .header h1 {
+      font-size: 2rem;
+    }
+
+    .header-subtitle {
+      font-size: 1rem;
+      margin: var(--spacing-1) 0 0 0;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-4);
+    }
+  }
+
+   .row {
     display: flex;
-    overflow-x: auto;
+    align-items: center;
     gap: 8px;
-    margin-bottom: 16px;
-    padding-bottom: 8px; /* Prevent scrollbar clipping */
+    margin-bottom: 1rem;
   }
+
+  .wrap {
+    position: relative;
+    display: inline-block;
+  }
+
+  .btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--btn-border, #e5e7eb);
+    background: var(--btn-bg, #fff);
+    color: var(--btn-fg, #111827);
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    line-height: 1;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    transition: transform .06s ease, box-shadow .15s ease, opacity .15s ease;
+  }
+
+  .btn:hover { box-shadow: 0 6px 16px rgba(0,0,0,0.08); transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+
+  /* Visually disabled but still focusable/clickable */
+  .btn[aria-disabled="true"] {
+    opacity: 0.55;
+    cursor: not-allowed;
+    box-shadow: none;
+    filter: grayscale(15%);
+  }
+  .btn[aria-disabled="true"]:hover {
+    transform: none;
+    box-shadow: none;
+  }
+
+  /* Tooltip */
+  .hint {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 10px);
+    transform: translateX(-50%) translateY(4px);
+    background: #111;
+    color: #fff;
+    padding: 6px 10px;
+    font-size: 12px;
+    border-radius: 8px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .15s ease, transform .15s ease;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+  }
+  .hint::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    width: 8px; height: 8px;
+    background: #111;
+    transform: translateX(-50%) rotate(45deg);
+    border-radius: 2px;
+  }
+  .wrap:hover .hint,
+  .wrap:focus-within .hint {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    background: #1f2937; /* slate-800 */
+    color: white;
+    padding: 12px 16px;
+    border-radius: 12px;
+    font-size: 0.95rem;
+    box-shadow: 0 14px 32px rgba(0,0,0,0.28);
+    z-index: 1000;
+  }
+
+  .edit-cats-btn {
+    background: var(--color-primary-light);
+    border: 1px solid var(--color-border-accent);
+    color: var(--color-text-primary);
+    cursor: pointer;
+    border-radius: var(--radius-full);
+    padding: var(--spacing-2) var(--spacing-4);
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: all 0.3s var(--ease-spring);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-1);
+    min-height: 44px;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .edit-cats-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, var(--color-primary), var(--color-primary-hover));
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    border-radius: inherit;
+  }
+  
+  .edit-cats-btn:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--color-primary);
+  }
+
+  .edit-cats-btn:hover::before {
+    opacity: 1;
+  }
+
+  .edit-cats-btn:hover {
+    color: white;
+  }
+
+  .edit-cats-btn:active {
+    transform: translateY(0) scale(0.98);
+  }
+
+  @media (min-width: 768px) {
+    .edit-cats-btn {
+      font-size: 0.9rem;
+      min-height: auto;
+      padding: var(--spacing-3) var(--spacing-5);
+    }
+  }
+
+  /* --- Expert-Level Account Switcher --- */
+  .account-switcher {
+    position: relative;
+    display: inline-block;
+    z-index: 10000;
+  }
+
+  .account-selector {
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border-soft);
+    color: var(--color-text-primary);
+    cursor: pointer;
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-3) var(--spacing-4);
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: all 0.3s var(--ease-spring);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    min-height: 48px;
+    backdrop-filter: blur(12px);
+    position: relative;
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    min-width: 160px;
+    justify-content: space-between;
+  }
+
+  .account-selector::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, var(--color-primary-light), transparent, var(--color-success-light));
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    border-radius: inherit;
+  }
+
+  .account-selector:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--color-primary-light);
+    backdrop-filter: blur(16px);
+  }
+
+  .account-selector:hover::before {
+    opacity: 0.15;
+  }
+
+  .account-selector:active {
+    transform: translateY(0) scale(0.98);
+    transition-duration: 0.1s;
+  }
+
+  .account-name {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    flex: 1;
+  }
+
+  .account-title {
+    font-weight: 700;
+    font-size: 0.9rem;
+    letter-spacing: -0.01em;
+  }
+
+  .account-type {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    font-weight: 500;
+    opacity: 0.8;
+    text-transform: capitalize;
+  }
+
+  .account-arrow {
+    color: var(--color-text-secondary);
+    font-size: 0.8rem;
+    transition: transform 0.3s var(--ease-spring);
+  }
+
+  .account-selector.open .account-arrow {
+    transform: rotate(180deg);
+  }
+
+  .account-dropdown {
+    position: absolute;
+    top: calc(100% + var(--spacing-2));
+    left: 0;
+    right: 0;
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border-soft);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-xl);
+    backdrop-filter: blur(20px);
+    z-index: 99999;
+    overflow: hidden;
+    max-height: 280px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-primary-light) transparent;
+  }
+
+  .account-dropdown::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .account-dropdown::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .account-dropdown::-webkit-scrollbar-thumb {
+    background: var(--color-primary-light);
+    border-radius: var(--radius-full);
+  }
+
+  .account-option {
+    width: 100%;
+    padding: var(--spacing-4) var(--spacing-5);
+    border: none;
+    background: transparent;
+    color: var(--color-text-primary);
+    cursor: pointer;
+    transition: all 0.3s var(--ease-spring);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 600;
+    font-size: 0.9rem;
+    position: relative;
+    overflow: hidden;
+    text-align: left;
+  }
+
+  .account-option::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    background: linear-gradient(90deg, var(--color-primary), var(--color-primary-light));
+    transition: width 0.3s var(--ease-spring);
+  }
+
+  .account-option:hover {
+    background: var(--color-bg-glass);
+    transform: translateX(4px);
+  }
+
+  .account-option:hover::before {
+    width: 4px;
+  }
+
+  .account-option.selected {
+    background: var(--color-primary-light);
+    color: var(--color-primary);
+    font-weight: 700;
+  }
+
+  .account-option.selected::before {
+    width: 4px;
+    background: var(--color-primary);
+  }
+
+  .account-option-details {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    flex: 1;
+  }
+
+  .account-option-name {
+    font-weight: 600;
+    margin-bottom: var(--spacing-1);
+  }
+
+  .account-option-type {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    text-transform: capitalize;
+    opacity: 0.8;
+  }
+
+  .account-option-badge {
+    background: var(--color-success-light);
+    color: var(--color-success);
+    padding: var(--spacing-1) var(--spacing-2);
+    border-radius: var(--radius-sm);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+
+  @media (min-width: 768px) {
+    .account-selector {
+      min-width: 200px;
+      padding: var(--spacing-4) var(--spacing-5);
+      font-size: 1rem;
+    }
+
+    .account-title {
+      font-size: 1rem;
+    }
+
+    .account-type {
+      font-size: 0.8rem;
+    }
+
+    .account-option {
+      padding: var(--spacing-5) var(--spacing-6);
+      font-size: 1rem;
+    }
+  }
+
+  /* --- Expert-Level Category Grid --- */
+  .cat-icons {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(82px, 1fr));
+    gap: var(--spacing-3);
+    margin-bottom: var(--spacing-6);
+    padding: var(--spacing-4);
+    background: var(--color-bg-glass);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-lg);
+    backdrop-filter: blur(16px);
+    box-shadow: var(--shadow-sm);
+    perspective: 1000px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .cat-icons::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, var(--color-glass-accent), transparent, var(--color-glass-accent));
+    opacity: 0.05;
+    pointer-events: none;
+  }
+
+  @media (min-width: 768px) {
+    .cat-icons {
+      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+      gap: var(--spacing-4);
+      margin-bottom: var(--spacing-8);
+      padding: var(--spacing-6);
+      border-radius: var(--radius-xl);
+      backdrop-filter: blur(20px);
+      box-shadow: var(--shadow-md);
+    }
+  }
+  
   .cat-button {
-    flex-shrink: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 10px 8px; /* Slightly more padding */
-    /* Match main layout input styles */
-    border: 1px solid rgba(71, 85, 105, 0.4);
-    border-radius: 8px;
-    width: 70px;
-    /* Match main layout card background */
-    background-color: rgba(30, 41, 59, 0.5);
+    justify-content: center;
+    padding: var(--spacing-3) var(--spacing-2);
+    border: 1px solid var(--color-border-soft);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-elevated);
+    backdrop-filter: blur(12px);
     cursor: pointer;
-    transition: all 0.2s ease;
-  }
-  .cat-button:hover {
-    /* Subtle hover effect */
-    background-color: rgba(59, 130, 246, 0.1);
-    border-color: rgba(59, 130, 246, 0.5);
-  }
-  .cat-button.selected {
-    /* Match primary color for selection */
-    border-color: #3b82f6;
-    background-color: rgba(59, 130, 246, 0.15);
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
-  }
-  .cat-button div {
-    /* Adjust font size and color */
-    font-size: 12px;
-    color: #cbd5e1;
-    margin-top: 4px;
+    transition: all 0.4s var(--ease-spring);
+    min-height: 88px;
+    min-width: 44px;
+    position: relative;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    transform-style: preserve-3d;
+    animation: categoryButtonEntrance 0.5s ease-out forwards;
+    animation-delay: calc(var(--index, 0) * 0.05s);
+    opacity: 0;
+    transform: translateY(15px) rotateX(15deg);
+    box-shadow: var(--shadow-xs);
   }
 
-  /* --- Radio List --- */
-  .radio-list {
-    margin-bottom: 1rem;
+  @keyframes categoryButtonEntrance {
+    to {
+      opacity: 1;
+      transform: translateY(0) rotateX(0);
+    }
   }
+
+  @media (min-width: 768px) {
+    .cat-button {
+      padding: var(--spacing-4) var(--spacing-3);
+      border-radius: var(--radius-lg);
+      min-height: 110px;
+      transition: all 0.4s var(--ease-spring);
+      box-shadow: var(--shadow-sm);
+    }
+  }
+  
+  .cat-button::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, var(--color-primary-light), transparent, var(--color-primary-light));
+    opacity: 0;
+    transition: opacity 0.3s var(--ease-out-cubic);
+    border-radius: inherit;
+  }
+  
+  .cat-button:hover {
+    transform: translateY(-4px) scale(1.05) rotateX(5deg);
+    border-color: var(--color-primary);
+    box-shadow: var(--shadow-lg);
+    backdrop-filter: blur(16px);
+  }
+  
+  .cat-button:hover::before {
+    opacity: 0.15;
+  }
+
+  .cat-button:active {
+    transform: translateY(-1px) scale(0.98);
+    transition-duration: 0.1s;
+  }
+  
+  .cat-button.selected {
+    border-color: var(--color-primary);
+    background: var(--color-primary-light);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px) scale(1.02);
+    backdrop-filter: blur(20px);
+  }
+  
+  .cat-button.selected::before {
+    opacity: 0.25;
+    background: linear-gradient(135deg, var(--color-primary), transparent, var(--color-primary));
+  }
+  
+  .cat-button div {
+    font-size: 0.7rem;
+    color: var(--color-text-secondary);
+    margin-top: var(--spacing-2);
+    font-weight: 600;
+    text-align: center;
+    transition: all 0.3s var(--ease-out-cubic);
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    position: relative;
+    z-index: 1;
+  }
+
+  @media (min-width: 768px) {
+    .cat-button div {
+      font-size: 0.8rem;
+      margin-top: var(--spacing-3);
+    }
+  }
+  
+  .cat-button.selected div {
+    color: var(--color-primary);
+    font-weight: 700;
+    transform: scale(1.05);
+  }
+
+  .cat-button:hover div {
+    color: var(--color-text-primary);
+    transform: scale(1.02);
+  }
+
+  /* --- Expert-Level Subcategory List --- */
+  .radio-list {
+    margin-bottom: var(--spacing-8);
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border-soft);
+    border-radius: var(--radius-xl);
+    padding: var(--spacing-5);
+    max-height: 320px;
+    overflow-y: auto;
+    backdrop-filter: blur(20px);
+    box-shadow: var(--shadow-md);
+    position: relative;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-primary-light) transparent;
+  }
+
+  .radio-list::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .radio-list::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .radio-list::-webkit-scrollbar-thumb {
+    background: var(--color-primary-light);
+    border-radius: var(--radius-full);
+  }
+
+  .radio-list::-webkit-scrollbar-thumb:hover {
+    background: var(--color-primary);
+  }
+
   .radio-list label {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin: 6px 0;
-    padding: 6px 10px;
-    border-radius: 6px;
-    transition: background-color 0.2s ease;
+    justify-content: space-between;
+    padding: var(--spacing-4) var(--spacing-5);
+    margin-bottom: var(--spacing-2);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition: all 0.3s var(--ease-spring);
+    border: 1px solid var(--color-border-soft);
+    background: var(--color-bg-glass);
+    backdrop-filter: blur(12px);
+    position: relative;
+    overflow: hidden;
+    min-height: 52px;
+  }
+
+  .radio-list label::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    background: linear-gradient(90deg, var(--color-primary), var(--color-primary-light));
+    transition: width 0.3s var(--ease-spring);
+  }
+
+  .radio-list label:hover {
+    background: var(--color-bg-elevated);
+    border-color: var(--color-primary-light);
+    transform: translateX(4px) translateY(-1px);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .radio-list label:hover::before {
+    width: 4px;
+  }
+
+  .radio-list input[type="radio"] {
+    accent-color: var(--color-primary);
+    width: 20px;
+    height: 20px;
+    flex: none;
+    margin-right: var(--spacing-4);
+    transform: scale(1.1);
     cursor: pointer;
   }
-  .radio-list label:hover {
-    background-color: rgba(59, 130, 246, 0.05);
+
+  .radio-list input[type="radio"]:checked + .sub-text {
+    color: var(--color-primary);
+    font-weight: 600;
   }
-  .radio-list input[type="radio"] {
-    /* Style the radio button to match */
-    accent-color: #3b82f6; /* Blue color for the dot */
-    width: 18px;
-    height: 18px;
-    flex: none;
-  }
+
   .sub-text {
-    font-size: 0.85rem;
-    color: #94a3b8;
+    color: var(--color-text-primary);
+    font-weight: 500;
     flex: 1;
-    padding-left: 6px;
+    font-size: 0.9rem;
   }
+
+  .sub-meta {
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+    font-weight: 400;
+  }
+
   .sub-meta {
     font-size: 0.78rem;
     color: #9ca3af;
@@ -619,79 +1404,337 @@ $: updateKeywordMap($categories);
     white-space: nowrap;
   }
 
-  /* --- Input Fields --- */
+  /* --- Expert-Level Form Elements --- */
   .input-group {
-    margin-bottom: 1.25rem; /* Consistent spacing */
+    margin-bottom: var(--spacing-5);
+    position: relative;
   }
 
-  /* Base input field styles matching main layout */
+  @media (min-width: 768px) {
+    .input-group {
+      margin-bottom: var(--spacing-6);
+    }
+  }
+
   .input-field {
     width: 100%;
-    padding: 0.85rem 1rem;
-    /* Match main layout input background and border */
-    background: rgba(30, 41, 59, 0.7);
-    border: 1px solid rgba(71, 85, 105, 0.4);
-    border-radius: 8px;
+    padding: var(--spacing-4) var(--spacing-5);
+    border: 1px solid var(--color-border-soft);
+    border-radius: var(--radius-lg);
+    background: var(--color-bg-elevated);
+    color: var(--color-text-primary);
     font-size: 1rem;
-    color: #e2e8f0;
+    font-weight: 500;
+    transition: all 0.3s var(--ease-spring);
+    backdrop-filter: blur(16px);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     box-sizing: border-box;
-    transition: all 0.2s ease;
-    font-family: 'Inter', sans-serif;
+    min-height: 56px;
+    -webkit-appearance: none;
+    appearance: none;
+    position: relative;
+    box-shadow: var(--shadow-xs);
+  }
+
+  @media (min-width: 768px) {
+    .input-field {
+      border-radius: var(--radius-xl);
+      font-size: 1.1rem;
+      min-height: 60px;
+      padding: var(--spacing-5) var(--spacing-6);
+    }
   }
 
   .input-field:focus {
     outline: none;
-    /* Match main layout focus state */
-    border-color: rgba(59, 130, 246, 0.8);
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
-    background: rgba(30, 41, 59, 0.9);
+    border-color: var(--color-primary);
+    box-shadow: var(--shadow-md);
+    background: var(--color-bg-glass);
+    transform: translateY(-2px) scale(1.01);
   }
 
   .input-field::placeholder {
-    /* Match placeholder color */
-    color: #94a3b8;
+    color: var(--color-text-muted);
+    opacity: 0.8;
+    font-weight: 400;
+    transition: all 0.3s ease;
+  }
+
+  .input-field:focus::placeholder {
+    opacity: 0.5;
+    transform: translateX(4px);
+  }
+
+  /* --- Expert-Level Amount Controls --- */
+  .amount-row {
+    display: flex;
+    align-items: stretch;
+    gap: var(--spacing-3);
+  }
+
+  @media (min-width: 768px) {
+    .amount-row {
+      gap: var(--spacing-4);
+    }
+  }
+
+  .amount-input {
+    flex: 1;
+  }
+
+  .amount-controls {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-1);
+  }
+
+  .compact-btn {
+    width: 44px;
+    height: 28px;
+    border: 1px solid var(--color-border-accent);
+    background: var(--color-bg-elevated);
+    color: var(--color-primary);
+    border-radius: var(--radius-md);
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s var(--ease-spring);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+    min-width: 44px;
+    min-height: 44px;
+    backdrop-filter: blur(12px);
+    box-shadow: var(--shadow-xs);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .compact-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, var(--color-primary), var(--color-primary-light));
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    border-radius: inherit;
+  }
+
+  .compact-btn:hover {
+    transform: translateY(-2px) scale(1.05);
+    border-color: var(--color-primary);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .compact-btn:hover::before {
     opacity: 1;
   }
 
-  /* Amount input with compact up/down controls */
-  .amount-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+  .compact-btn:hover {
+    color: white;
   }
-  .amount-input { flex: 1; }
-  .amount-controls {
-    display: flex;
-    flex-direction: row; /* place buttons side-by-side */
-    gap: 6px;
-    align-items: center;
-  }
-  .compact-btn {
-    width: 36px;
-    height: 32px;
-    padding: 0;
-    border-radius: 8px;
-    border: 1px solid rgba(71,85,105,0.4);
-    background: rgba(30,41,59,0.7);
-    color: #cbd5e1;
-    font-size: 1rem;
-    cursor: pointer;
-  }
-  .compact-btn:hover { background: rgba(59,130,246,0.08); color: #e2e8f0; }
 
-  /* Specific styles for action buttons that look like inputs */
+  .compact-btn:active {
+    transform: translateY(0) scale(0.95);
+    transition-duration: 0.1s;
+  }
+
+  @media (min-width: 768px) {
+    .compact-btn {
+      width: 48px;
+      height: 30px;
+      font-size: 0.85rem;
+      min-width: auto;
+      min-height: auto;
+      border-radius: var(--radius-lg);
+    }
+  }
+
+  .compact-btn:hover {
+    background: var(--color-primary);
+    color: white;
+    transform: scale(1.05);
+  }
+
+  .compact-btn:active {
+    transform: scale(0.95);
+  }
+
+  /* --- Premium Action Buttons --- */
   .action-button {
     text-align: left;
     cursor: pointer;
-    background: rgba(30, 41, 59, 0.7);
-    border: 1px solid rgba(71, 85, 105, 0.4);
-    color: #cbd5e1;
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border-subtle);
+    color: var(--color-text-secondary);
     transition: all 0.2s ease;
+    backdrop-filter: blur(10px);
+    font-weight: 500;
   }
+
   .action-button:hover {
-    background: rgba(59, 130, 246, 0.1);
-    border-color: rgba(59, 130, 246, 0.5);
-    color: #e2e8f0;
+    background: var(--color-primary-light);
+    border-color: var(--color-primary);
+    color: var(--color-text-primary);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* --- Expert-Level Submit Button --- */
+  .submit-btn {
+    width: 100%;
+    padding: var(--spacing-5) var(--spacing-6);
+    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%);
+    border: none;
+    border-radius: var(--radius-xl);
+    color: white;
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    cursor: pointer;
+    transition: all 0.4s var(--ease-spring);
+    margin-top: var(--spacing-6);
+    margin-bottom: var(--spacing-6);
+    box-shadow: var(--shadow-lg);
+    position: relative;
+    overflow: hidden;
+    min-height: 56px;
+    backdrop-filter: blur(20px);
+  }
+
+  .submit-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, transparent 50%, rgba(255, 255, 255, 0.1) 100%);
+    transition: all 0.3s ease;
+    opacity: 0;
+    transform: translateX(-100%);
+  }
+
+  .submit-btn:hover {
+    transform: translateY(-4px) scale(1.02);
+    box-shadow: var(--shadow-2xl);
+    background: linear-gradient(135deg, var(--color-primary-hover) 0%, var(--color-primary) 100%);
+  }
+
+  .submit-btn:hover::before {
+    opacity: 1;
+    transform: translateX(100%);
+    transition-duration: 0.6s;
+  }
+
+  .submit-btn:active {
+    transform: translateY(-1px) scale(0.98);
+    transition-duration: 0.1s;
+  }
+
+  .submit-btn:disabled {
+    background: var(--color-text-muted);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: var(--shadow-sm);
+    opacity: 0.6;
+  }
+
+  .submit-btn:disabled::before {
+    opacity: 0;
+    transform: translateX(-100%);
+  }
+
+  @media (min-width: 768px) {
+    .submit-btn {
+      font-size: 1.2rem;
+      min-height: 64px;
+      margin-top: var(--spacing-8);
+      margin-bottom: var(--spacing-8);
+    }
+  }
+
+  /* Additional premium styles */
+  .header-left h1 {
+    margin: 0;
+  }
+  
+  .header-subtitle {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    margin: var(--spacing-xs) 0 0 0;
+    font-weight: 400;
+  }
+
+  .section-title {
+    color: var(--color-text-primary);
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0 0 var(--spacing-md) 0;
+    padding-bottom: var(--spacing-xs);
+    border-bottom: 1px solid var(--color-border-subtle);
+  }
+
+  /* --- Mobile-First Quick Actions --- */
+  .quick-actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-md);
+  }
+
+  @media (min-width: 768px) {
+    .quick-actions {
+      flex-direction: row;
+      flex-wrap: wrap;
+      margin-bottom: var(--spacing-xl);
+    }
+  }
+
+  .form-section {
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    padding: var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+    backdrop-filter: blur(10px);
+  }
+
+  @media (min-width: 768px) {
+    .form-section {
+      border-radius: var(--radius-md);
+      padding: var(--spacing-lg);
+      margin-bottom: var(--spacing-lg);
+    }
+  }
+
+  .input-label {
+    display: block;
+    color: var(--color-text-secondary);
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-bottom: var(--spacing-xs);
+  }
+
+  @media (min-width: 768px) {
+    .input-label {
+      font-size: 0.9rem;
+    }
+  }
+
+  /* Loading spinner animation */
+  .loading-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: white;
+    animation: spin 0.8s ease-in-out infinite;
+    margin-right: var(--spacing-sm);
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 
   /* Textarea specific adjustments */
@@ -700,24 +1743,84 @@ $: updateKeywordMap($categories);
     resize: vertical;
   }
 
-  /* --- Round Buttons (Step Amount) --- */
-  .round-btn {
-    flex: 1;
-    padding: 8px 0; /* Slightly larger padding */
-    font-size: 1.2rem;
-    /* Match main layout button styles subtly */
-    background: rgba(30, 41, 59, 0.7);
-    border: 1px solid rgba(71, 85, 105, 0.4);
-    border-radius: 8px;
-    cursor: pointer;
-    color: #cbd5e1;
-    transition: all 0.2s ease;
-    font-weight: 500;
+  /* Screen reader only */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
-  .round-btn:hover {
-    background: rgba(59, 130, 246, 0.1);
-    border-color: rgba(59, 130, 246, 0.5);
-    color: #e2e8f0;
+
+  /* --- Mobile Optimization --- */
+  @media (max-width: 767px) {
+    .radio-list {
+      max-height: 200px;
+      padding: var(--spacing-sm);
+    }
+
+    .radio-list label {
+      padding: var(--spacing-sm);
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--spacing-xs);
+    }
+
+    .sub-meta {
+      font-size: 0.75rem;
+      margin-left: 0;
+      opacity: 0.8;
+    }
+
+    .amount-controls {
+      flex-direction: row;
+      gap: var(--spacing-xs);
+    }
+
+    .compact-btn {
+      flex: 1;
+    }
+
+    .section-title {
+      font-size: 1rem;
+      margin-bottom: var(--spacing-sm);
+    }
+
+    .submit-btn {
+      margin-top: var(--spacing-md);
+      margin-bottom: var(--spacing-md);
+      font-size: 1.1rem;
+      padding: var(--spacing-md) var(--spacing-lg);
+      min-height: 48px; /* Larger touch target on mobile */
+    }
+
+    .salary-line {
+      font-size: 0.8rem;
+      text-align: center;
+      margin-top: var(--spacing-md);
+    }
+  }
+
+  /* Desktop enhancements */
+  @media (min-width: 768px) {
+    .cat-button:hover {
+      transform: translateY(-2px) scale(1.02);
+      border-color: var(--color-primary);
+      box-shadow: var(--shadow-md);
+    }
+
+    .radio-list label:hover {
+      transform: translateX(2px);
+    }
+
+    .submit-btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-lg);
+    }
   }
 
   /* --- Submit Button --- */
@@ -771,9 +1874,6 @@ $: updateKeywordMap($categories);
     background: rgba(30, 41, 59, 0.5);
     border: 1px solid rgba(71, 85, 105, 0.2);
   }
-  .salary-line span {
-    font-weight: 500;
-  }
 
   /* --- Notification Drawer --- */
   .notif-drawer {
@@ -791,12 +1891,17 @@ $: updateKeywordMap($categories);
   }
 
   .notif-row {
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
     padding: 8px 12px;
     cursor: pointer;
     font-size: 0.9rem;
     border-bottom: 1px solid rgba(30, 58, 138, 0.1);
     color: #e2e8f0;
     transition: background-color 0.2s ease;
+    font-family: inherit;
   }
   .notif-row:last-child {
     border-bottom: none;
@@ -822,16 +1927,65 @@ $: updateKeywordMap($categories);
 </style>
 
 <div class="page">
-  <div class="header" style="display:flex; align-items:center; gap:8px;">
-    <h1>Edit Categories</h1>
-    <button
-      class="edit-cats-btn"
-      on:click={openEditCategories}
-      title="Edit categories"
-      aria-label="Edit categories"
-    >
-      ✏️
-    </button>
+  <!-- Enhanced Header with better visual hierarchy -->
+  <div class="header">
+    <div class="header-left">
+      <h1>Budget Dashboard</h1>
+      <p class="header-subtitle">Track expenses and manage your categories</p>
+    </div>
+    <div class="header-right">
+      <!-- Expert Account Switcher -->
+      <div class="account-switcher">
+        <button
+          class="account-selector {showAccountDropdown ? 'open' : ''}"
+          on:click={toggleAccountDropdown}
+          on:keydown={handleAccountKeydown}
+          aria-expanded={showAccountDropdown}
+          aria-haspopup="listbox"
+          title="Switch account"
+        >
+          <div class="account-name">
+            <div class="account-title">
+              {$currentAccount?.name || 'Select Account'}
+            </div>
+            {#if $currentAccount?.type}
+              <div class="account-type">{$currentAccount.type}</div>
+            {/if}
+          </div>
+          <div class="account-arrow">▼</div>
+        </button>
+
+        {#if showAccountDropdown && $accounts.length > 0}
+          <div class="account-dropdown" transition:fly={{ y: -10, duration: 200 }}>
+            {#each $accounts as account (account.id)}
+              <button
+                class="account-option {$currentAccount?.id === account.id ? 'selected' : ''}"
+                on:click={() => handleAccountSelect(account.id)}
+                role="option"
+                aria-selected={$currentAccount?.id === account.id}
+              >
+                <div class="account-option-details">
+                  <div class="account-option-name">{account.name}</div>
+                  <div class="account-option-type">{account.type}</div>
+                </div>
+                {#if $currentAccount?.id === account.id}
+                  <div class="account-option-badge">Active</div>
+                {/if}
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+
+      <button
+        class="edit-cats-btn"
+        on:click={openEditCategories}
+        title="Edit categories"
+        aria-label="Edit categories"
+      >
+        ✏️ Edit Categories
+      </button>
+    </div>
   </div>
 
   {#if showEditCategories}
@@ -862,7 +2016,7 @@ $: updateKeywordMap($categories);
   {#if showNotifs && reminders.length}
     <div class="notif-drawer">
       {#each reminders as r}
-        <div
+        <button
           class="notif-row {urgency(r)}"
           on:click={() => {
             popupItem = r;
@@ -870,88 +2024,133 @@ $: updateKeywordMap($categories);
           }}
         >
           {r.category} – {r.subcategory}  ${r.amount}
-        </div>
+        </button>
       {/each}
     </div>
   {/if}
 
+  <!-- Enhanced Category Grid -->
   <div class="cat-icons">
-    {#each $categories as cat (cat.name)}
+    {#each $categories as cat, index (cat.name)}
       <div
         class="cat-button {cat.name === selectedMain ? 'selected' : ''}"
-        on:click={() => {selectedMain = cat.name; selectedSub  = '';
-       }}
+        on:click={() => {selectedMain = cat.name; selectedSub = '';}}
+        on:keydown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            selectedMain = cat.name;
+            selectedSub = '';
+          }
+        }}
+        role="button"
+        tabindex="0"
+        aria-pressed={cat.name === selectedMain}
+        style="animation-delay: {index * 50}ms"
+        in:fly={{ y: 20, duration: 300, delay: index * 50 }}
       >
         <Icon name={cat.icon} size={32} color={cat.color} />
-        <div style="font-size:12px">{cat.name}</div>
+        <div>{cat.name}</div>
       </div>
     {/each}
   </div>
   
-   <div class="radio-list">
-        {#each currentCat?.subs ?? [] as sub}
-          <label class="sub-label">
-            <input class="sub-radio" name="subcategory" type="radio" bind:group={selectedSub} value={sub} />
-            <span class="sub-text">{sub}</span>
-            <span class="sub-meta">
-              (Spent: ${getSpent(selectedMain, sub).toFixed(0)} – Allocated: ${getAllocation(selectedMain, sub).toFixed(0)})
-            </span>
-          </label>
-        {/each}
+  <!-- Enhanced Subcategory Selection -->
+  {#if currentCat}
+    <div class="radio-list" in:fade={{ duration: 200 }}>
+      <h3 class="section-title">{selectedMain} Subcategories</h3>
+      {#each currentCat?.subs ?? [] as sub, index}
+        <label class="sub-label" style="animation-delay: {index * 25}ms" in:fly={{ x: -10, duration: 200, delay: index * 25 }}>
+          <input class="sub-radio" name="subcategory" type="radio" bind:group={selectedSub} value={sub} />
+          <span class="sub-text">{sub}</span>
+          <span class="sub-meta">
+            Spent: ${getSpent(selectedMain, sub).toFixed(0)} • Allocated: ${getAllocation(selectedMain, sub).toFixed(0)}
+          </span>
+        </label>
+      {/each}
 
-        <OtherSubcategoryItem
-          categoryName={selectedMain}
-          selected={selectedSub}
-          busy={!!pendingCreates[selectedMain]}
-          on:create={handleCreateSubcategory}
-          on:select={(e) => { selectedSub = e.detail; }}
-        />
-      </div>
+      <OtherSubcategoryItem
+        categoryName={selectedMain}
+        selected={selectedSub}
+        busy={!!pendingCreates[selectedMain]}
+        on:create={handleCreateSubcategory}
+        on:select={(e) => { selectedSub = e.detail; }}
+      />
+    </div>
+  {/if}
 
-  <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 1rem;">
+  <!-- Enhanced Quick Actions Row -->
+  <div class="quick-actions" in:fade={{ duration: 300, delay: 200 }}>
     <button class="input-field action-button" on:click={openCalculator}>
-      🧮 Open Calculator
+      🧮 Calculator
     </button>
-    <button class="input-field action-button" on:click={openCamera}>📷 Scan receipt</button>
+    <span class="wrap">
+      <button
+        class="input-field action-button btn"
+        aria-disabled={featureInProgress}
+        tabindex="0"
+        on:click={() => handleAction(openCamera, "📷 Scan Receipt is in progress")}
+        on:keydown={blockIfDisabled}
+      >
+        📷 Scan Receipt
+      </button>
+      {#if featureInProgress}
+        <span class="hint">🚧 Feature in progress</span>
+      {/if}
+    </span>
     <QuickSpeechEntry on:spoken={handleSpeech}/>
-    <CalculatorModal
-      visible={showCalc}
-      prefill={calcPrefill}
-      onResult={handleCalcResult}
-      onClose={() => (showCalc = false)}
-    />
   </div>
 
-      <!-- accessibility announcements -->
-      <div aria-live="polite" class="sr-only">{announcement}</div>
-  <div class="input-group">
-    <div class="amount-row">
-      <input
-        type="number"
-        bind:value={amount}
-        placeholder="Enter amount"
-        class="input-field amount-input"
-        aria-label="Enter amount"
-      />
-      <div class="amount-controls" role="group" aria-label="Adjust amount">
-        <button class="compact-btn" on:click={() => stepFive('up')} aria-label="Increase by step" title="Increase">▲</button>
-        <button class="compact-btn" on:click={() => stepFive('down')} aria-label="Decrease by step" title="Decrease">▼</button>
+  <!-- Enhanced Form Section -->
+  <div class="form-section" in:fade={{ duration: 300, delay: 300 }}>
+    <h3 class="section-title">Quick Entry</h3>
+    
+    <!-- accessibility announcements -->
+    <div aria-live="polite" class="sr-only">{announcement}</div>
+    
+    <div class="input-group">
+      <label class="input-label" for="amount-input">Amount</label>
+      <div class="amount-row">
+        <input
+          id="amount-input"
+          type="number"
+          bind:value={amount}
+          placeholder="0.00"
+          class="input-field amount-input"
+          aria-label="Enter amount"
+        />
+        <div class="amount-controls" role="group" aria-label="Adjust amount">
+          <button class="compact-btn" on:click={() => stepFive('up')} aria-label="Increase by step" title="Increase">▲</button>
+          <button class="compact-btn" on:click={() => stepFive('down')} aria-label="Decrease by step" title="Decrease">▼</button>
+        </div>
       </div>
     </div>
+
+    <div class="input-group">
+      <label class="input-label" for="description-input">Description</label>
+      <textarea
+        id="description-input"
+        bind:value={description}
+        placeholder="Add a note (optional)"
+        class="input-field"
+        rows="3"
+      ></textarea>
+    </div>
+
+    <button on:click={submit} class="submit-btn" disabled={submitting}>
+      {#if submitting}
+        <span class="loading-spinner"></span>
+        Submitting...
+      {:else}
+        Add Expense
+      {/if}
+    </button>
   </div>
 
-  <div class="input-group">
-    <textarea
-      bind:value={description}
-      placeholder="Add a note (optional)"
-      class="input-field"
-      rows="3"
-    />
-  </div>
-
-  <button on:click={submit} class="submit-btn" disabled={submitting}>
-    {submitting ? 'Submitting...' : 'Submit'}
-  </button>
+  {#if showToast}
+    <div class="toast" transition:fly={{ y: 30, duration: 300 }}>
+      🚧 Feature in progress
+    </div>
+  {/if}
 
   {#if salary !== null}
     <div class="salary-line">
@@ -964,7 +2163,7 @@ $: updateKeywordMap($categories);
   {/if}
 
   <div style="position: fixed; top: 10px; left: 10px; z-index: 1000;">
-    <button on:click={openSidebar} style="font-size: 24px; background:none; border:none; cursor:pointer;">
+    <button on:click={openSidebar} style="font-size: 24px; background:none; border:none; cursor:pointer; color:aliceblue">
       ☰
     </button>
   </div>

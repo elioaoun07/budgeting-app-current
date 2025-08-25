@@ -33,6 +33,7 @@ Notes   ▸ Responsive design, mobile sidebar, animated welcome, improved input/
   let navOpen = false;
   let isMobile = false;
   let showUserMenu = false; // New state for user menu
+  let transactionsExpanded = true; // State for transactions submenu
 
   // Initialize floating particles
   onMount(() => {
@@ -69,6 +70,22 @@ Notes   ▸ Responsive design, mobile sidebar, animated welcome, improved input/
   // Toggle user menu visibility
   function toggleUserMenu() {
     showUserMenu = !showUserMenu;
+  }
+
+  // Toggle transactions submenu
+  function toggleTransactions() {
+    transactionsExpanded = !transactionsExpanded;
+  }
+
+  // Dispatch events to the main page for modal triggers
+  function dispatchAddCategory() {
+    // Create custom event that can be listened to by child components
+    window.dispatchEvent(new CustomEvent('requestAddCategory'));
+  }
+
+  function dispatchAddAccount() {
+    // Create custom event that can be listened to by child components  
+    window.dispatchEvent(new CustomEvent('requestAddAccount'));
   }
 
   // Close user menu when clicking outside
@@ -220,14 +237,53 @@ Notes   ▸ Responsive design, mobile sidebar, animated welcome, improved input/
     </div>
     
     <ul class="nav-menu">
-      <li class="nav-item active">
-        <a href="/budgeting" class="nav-link">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-            <path d="M3 9L12 2L21 9V20C21 20.5304 20.7893 21.0391 20.4142 21.4142C20.0391 21.7893 19.5304 22 19 22H5C4.46957 22 3.96086 21.7893 3.58579 21.4142C3.21071 21.0391 3 20.5304 3 20V9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M9 22V12H15V22" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <li class="nav-item {transactionsExpanded ? 'expanded' : ''}">
+        <button class="nav-link nav-parent {transactionsExpanded ? 'expanded' : ''}" on:click={toggleTransactions}>
+          <div class="nav-link-content">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path d="M3 9L12 2L21 9V20C21 20.5304 20.7893 21.0391 20.4142 21.4142C20.0391 21.7893 19.5304 22 19 22H5C4.46957 22 3.96086 21.7893 3.58579 21.4142C3.21071 21.0391 3 20.5304 3 20V9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M9 22V12H15V22" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Transactions
+          </div>
+          <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <path d="M6 9L12 15L18 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
-          Transactions
-        </a>
+        </button>
+        
+        {#if transactionsExpanded}
+          <ul class="sub-menu" transition:fly={{ y: -10, duration: 200 }}>
+            <li class="sub-nav-item">
+              <a href="/budgeting" class="sub-nav-link active">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Overview
+              </a>
+            </li>
+            <li class="sub-nav-item">
+              <button class="sub-nav-link" on:click={() => dispatchAddCategory()}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 2V22M2 12H22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                  <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+                </svg>
+                Add Category
+              </button>
+            </li>
+            <li class="sub-nav-item">
+              <button class="sub-nav-link" on:click={() => dispatchAddAccount()}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M16 21V19C16 17.9391 15.5786 16.9217 14.8284 16.1716C14.0783 15.4214 13.0609 15 12 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <circle cx="8.5" cy="7" r="4" stroke="currentColor" stroke-width="2"/>
+                  <path d="M20 8V14M17 11H23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                Add Account
+              </button>
+            </li>
+          </ul>
+        {/if}
       </li>
       <li class="nav-item">
         <a href="/dashboard" class="nav-link">
@@ -614,6 +670,10 @@ Notes   ▸ Responsive design, mobile sidebar, animated welcome, improved input/
     font-weight: 500;
     transition: all 0.2s ease;
     border-left: 3px solid transparent;
+    background: none;
+    border: none;
+    width: 100%;
+    cursor: pointer;
   }
 
   .nav-link:hover {
@@ -623,6 +683,83 @@ Notes   ▸ Responsive design, mobile sidebar, animated welcome, improved input/
 
   .nav-link svg {
     flex-shrink: 0;
+  }
+
+  /* Enhanced nav parent styles */
+  .nav-parent {
+    justify-content: space-between;
+    position: relative;
+  }
+
+  .nav-link-content {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .chevron {
+    transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+    opacity: 0.7;
+  }
+
+  .nav-parent.expanded .chevron {
+    transform: rotate(180deg);
+  }
+
+  /* Sub-menu styles */
+  .sub-menu {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    background: rgba(15, 23, 42, 0.8);
+    backdrop-filter: blur(12px);
+    border-radius: 0 0 12px 12px;
+    border: 1px solid rgba(30, 58, 138, 0.3);
+    border-top: none;
+    margin-left: 1rem;
+    margin-right: 1rem;
+    overflow: hidden;
+    box-shadow: 
+      0 10px 25px -5px rgba(0, 0, 0, 0.25),
+      0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  }
+
+  .sub-nav-item {
+    margin: 0;
+  }
+
+  .sub-nav-link {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    color: #94a3b8;
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 400;
+    transition: all 0.2s ease;
+    border: none;
+    background: none;
+    width: 100%;
+    cursor: pointer;
+    position: relative;
+  }
+
+  .sub-nav-link:hover {
+    background: rgba(59, 130, 246, 0.15);
+    color: #e2e8f0;
+    transform: translateX(4px);
+  }
+
+  .sub-nav-link.active {
+    background: rgba(59, 130, 246, 0.2);
+    color: #3b82f6;
+    border-left: 2px solid #3b82f6;
+  }
+
+  .sub-nav-link svg {
+    flex-shrink: 0;
+    opacity: 0.8;
   }
 
   .nav-footer {
@@ -712,7 +849,7 @@ Notes   ▸ Responsive design, mobile sidebar, animated welcome, improved input/
   }
 
   /* Buttons within forms */
-  .main-content button:not(.nav-link, .menu-button, .logout-button, .user-menu-item) {
+  .main-content button:not(.nav-link, .sub-nav-link, .menu-button, .logout-button, .user-menu-item) {
     /* Target buttons that are not part of the nav */
     width: 100%;
     background: linear-gradient(135deg, #1e3a8a, #3b82f6); /* Consistent with login */
@@ -728,18 +865,18 @@ Notes   ▸ Responsive design, mobile sidebar, animated welcome, improved input/
     box-shadow: 0 4px 6px rgba(30, 58, 138, 0.2); /* Subtle shadow */
   }
 
-  .main-content button:not(.nav-link, .menu-button, .logout-button, .user-menu-item):hover {
+  .main-content button:not(.nav-link, .sub-nav-link, .menu-button, .logout-button, .user-menu-item):hover {
     background: linear-gradient(135deg, #2c5282, #4299e1); /* Slightly different gradient on hover */
     transform: translateY(-2px); /* Subtle lift */
     box-shadow: 0 6px 8px rgba(30, 58, 138, 0.3); /* Enhanced shadow */
   }
 
-  .main-content button:not(.nav-link, .menu-button, .logout-button, .user-menu-item):active {
+  .main-content button:not(.nav-link, .sub-nav-link, .menu-button, .logout-button, .user-menu-item):active {
     transform: translateY(0); /* Reset on click */
     box-shadow: 0 2px 4px rgba(30, 58, 138, 0.2); /* Reduced shadow */
   }
 
-  .main-content button:not(.nav-link, .menu-button, .logout-button, .user-menu-item):disabled {
+  .main-content button:not(.nav-link, .sub-nav-link, .menu-button, .logout-button, .user-menu-item):disabled {
     opacity: 0.6;
     cursor: not-allowed;
     transform: none;
