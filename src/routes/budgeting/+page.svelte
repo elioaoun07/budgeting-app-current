@@ -2202,4 +2202,11 @@ $: updateKeywordMap($categories);
     on:close={() => (showCam = false)}
     on:result={handleOCR}
   />
+
+  <CalculatorModal
+    visible={showCalc}
+    prefill={calcPrefill}
+    onResult={handleCalcResult}
+    onClose={() => (showCalc = false)}
+  />
 </div>
