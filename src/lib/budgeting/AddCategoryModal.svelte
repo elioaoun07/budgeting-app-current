@@ -42,10 +42,11 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
     }
   }
 
+  // Inside AddCategoryModal.svelte
   async function save() {
     if (!name.trim()) return;
-    await createCategory(name.trim(), selected, color);
-    dispatch('save');
+    const trimmedName = name.trim();
+    dispatch('save', { name: trimmedName, icon: selected, color });
   }
 
   function cancel() { dispatch('cancel'); }

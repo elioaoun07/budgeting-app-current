@@ -100,26 +100,31 @@ Notes   ▸ Animated background, typing quotes, error/success feedback, responsi
     isSubmitting = true;
     error = '';
     showParticles = true;
-
     const res = await fetch('/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+  credentials: 'same-origin',
       body: JSON.stringify({ email, password })
     });
 
     if (res.ok) {
-      await invalidateAll();
-      // Success animation
+      // Fire-and-forget global invalidation to avoid blocking the UI.
+      // This avoids waiting for all page load functions (which can be slow)
+      // while still prompting the app to refresh data in the background.
+      invalidateAll().catch(() => {});
+
+      // Shorter success animation so redirect feels snappier
       card.classList.add('success-glow');
       setTimeout(() => {
         window.location.href = '/budgeting';
-      }, 800);
+      }, 200);
     } else {
       error = 'Invalid credentials';
       // Error animation
       card.classList.add('shake');
       setTimeout(() => card.classList.remove('shake'), 600);
     }
+
     isSubmitting = false;
   }
 </script>

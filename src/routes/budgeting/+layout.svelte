@@ -39,7 +39,27 @@ Notes   ▸ Responsive design, mobile sidebar, animated welcome, improved input/
   onMount(() => {
     isMobile = window.innerWidth < 768;
     createParticles();
-    loadAccounts();
+    // If server provided accounts, hydrate client store to avoid extra fetch.
+    if (data?.accounts && data.accounts.length) {
+      try {
+        // Lazily import the store to avoid circular import in some setups
+        import('$lib/budgeting/store').then(mod => {
+          mod.accounts.set(data.accounts);
+          // Set a sensible default current account from server data.
+          // Overwriting here is acceptable during initial hydration.
+          if (data.accounts.length) {
+            try { mod.currentAccount.set(data.accounts[0]); } catch {}
+          }
+        }).catch(() => {
+          // Fallback to client-side load if hydrate fails
+          loadAccounts();
+        });
+      } catch (e) {
+        loadAccounts();
+      }
+    } else {
+      loadAccounts();
+    }
     
     // Hide welcome after delay
     setTimeout(() => {
@@ -86,6 +106,11 @@ Notes   ▸ Responsive design, mobile sidebar, animated welcome, improved input/
   function dispatchAddAccount() {
     // Create custom event that can be listened to by child components  
     window.dispatchEvent(new CustomEvent('requestAddAccount'));
+  }
+
+  function dispatchEditCategories() {
+    // Create custom event for editing categories
+    window.dispatchEvent(new CustomEvent('requestEditCategories'));
   }
 
   // Close user menu when clicking outside
@@ -270,6 +295,15 @@ Notes   ▸ Responsive design, mobile sidebar, animated welcome, improved input/
                   <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
                 </svg>
                 Add Category
+              </button>
+            </li>
+            <li class="sub-nav-item">
+              <button class="sub-nav-link" on:click={() => dispatchEditCategories()}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M11 4H4C3.46957 4 2.96086 4.21071 2.58579 4.58579C2.21071 4.96086 2 5.46957 2 6V20C2 20.5304 2.21071 21.0391 2.58579 21.4142C2.96086 21.7893 3.46957 22 4 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M18.5 2.50002C18.8978 2.10218 19.4374 1.87866 20 1.87866C20.5626 1.87866 21.1022 2.10218 21.5 2.50002C21.8978 2.89785 22.1213 3.43738 22.1213 4.00002C22.1213 4.56266 21.8978 5.10218 21.5 5.50002L12 15L8 16L9 12L18.5 2.50002Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Edit Categories
               </button>
             </li>
             <li class="sub-nav-item">

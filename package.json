@@ -43,6 +43,8 @@
 		"vite-plugin-pwa": "^1.0.1"
 	},
 	"dependencies": {
+		"@atlaskit/pragmatic-drag-and-drop": "^1.7.4",
+		"@atlaskit/pragmatic-drag-and-drop-hitbox": "^1.1.0",
 		"@supabase/auth-helpers-sveltekit": "^0.13.0",
 		"@supabase/supabase-js": "^2.53.0",
 		"bcryptjs": "^3.0.2",
@@ -55,6 +57,7 @@
 		"lucide-svelte": "^0.525.0",
 		"mathjs": "^14.4.0",
 		"openai": "^5.8.2",
+		"svelte-dnd-action": "^0.9.64",
 		"tesseract.js": "^6.0.1",
 		"three": "^0.176.0",
 		"uuid": "^11.1.0"

@@ -19,6 +19,7 @@ Used in ▸
   • Budgeting dashboard UI (category management)
 
 Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside.
+          Uses svelte-dnd-action for smooth drag and drop.
 ──────────────────────────────────────────────────────────────
 -->
 <script lang="ts">
@@ -28,106 +29,138 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
   import Icon from '$lib/icons/Icon.svelte';
   import type { Category } from '$lib/budgeting/defaults';
 
+  // --- Import latest svelte-dnd-action with advanced features ---
+  import { dndzone, TRIGGERS, SOURCES } from 'svelte-dnd-action';
+  import { flip } from 'svelte/animate';
+
   const dispatch = createEventDispatcher<{ save: string[]; cancel: void }>();
+  
+  // Create items with unique IDs for optimal tracking
   const initialCategories: Category[] = get(categoriesStore);
-  let items = $state(initialCategories.map(c => ({ ...c })));
+  let items = $state(
+    initialCategories.map((c, index) => ({ 
+      ...c, 
+      id: `category-${c.name}-${index}`, // Unique stable ID
+      originalIndex: index 
+    }))
+  );
 
-  // Drag and drop state
-  let dragIndex = $state<number | null>(null);
-  let dropIndicator = $state<{ index: number; position: 'above' | 'below' } | null>(null);
+  let isDragActive = $state(false);
+  let editingIndex = $state<number | null>(null);
 
-  // --- Enhanced Drag and Drop ---
-  function handleDragStart(e: DragEvent, index: number) {
-    if (!e.dataTransfer) return;
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', index.toString()); // Required for Firefox
-    dragIndex = index;
+  // Function to handle index changes
+  function handleIndexChange(currentIndex: number, newPosition: string) {
+    const newIndex = parseInt(newPosition) - 1; // Convert to 0-based index
     
-    // Improve drag ghost image
-    if (e.target instanceof HTMLElement) {
-      e.target.classList.add('dragging');
-      // Create a custom drag image for better UX
-      const dragImage = e.target.cloneNode(true) as HTMLElement;
-      dragImage.style.width = e.target.offsetWidth + 'px';
-      dragImage.style.position = 'absolute';
-      dragImage.style.top = '-1000px'; // Move off-screen
-      document.body.appendChild(dragImage);
-      e.dataTransfer.setDragImage(dragImage, 0, 0);
-      // Clean up the temporary element after a short delay
-      setTimeout(() => document.body.removeChild(dragImage), 0);
+    if (isNaN(newIndex) || newIndex < 0) {
+      return; // Invalid input, ignore
     }
-  }
 
-  // Inside handleDragOver, simplify the midpoint logic:
-  function handleDragOver(e: DragEvent, index: number) {
-      e.preventDefault();
-      if (!e.dataTransfer || dragIndex === null || dragIndex === index) {
-          dropIndicator = null;
-          return;
-      }
-
-      const itemElement = e.currentTarget as HTMLElement;
-      const rect = itemElement.getBoundingClientRect();
-      const midpoint = rect.top + rect.height / 2;
-
-      if (e.clientY <= midpoint) {
-          dropIndicator = { index, position: 'above' }; // Always 'above' for top half
-      } else {
-          dropIndicator = { index, position: 'below' }; // Always 'below' for bottom half
-      }
-  }
-
-  function handleDragLeave() {
-    dropIndicator = null;
-  }
-
-  function handleDrop(e: DragEvent, targetIndex: number) {
-    e.preventDefault();
-    if (dragIndex === null || dragIndex === targetIndex) {
-      resetDragState();
+    // If user inputs number greater than list length, move to last position
+    const targetIndex = newIndex >= items.length ? items.length - 1 : newIndex;
+    
+    if (targetIndex === currentIndex) {
+      editingIndex = null; // Just exit edit mode if same position
       return;
     }
 
-    // Calculate the actual insert index based on drop position
-    let insertIndex = targetIndex;
-    if (dropIndicator?.position === 'below' && targetIndex >= dragIndex) {
-      insertIndex = targetIndex + 1;
-    } else if (dropIndicator?.position === 'above' && targetIndex > dragIndex) {
-      insertIndex = targetIndex;
-    } else if (dropIndicator?.position === 'below' && targetIndex < dragIndex) {
-      insertIndex = targetIndex + 1;
+    // Reorder items array
+    const item = items[currentIndex];
+    const newItems = [...items];
+    
+    // Remove item from current position
+    newItems.splice(currentIndex, 1);
+    // Insert at new position
+    newItems.splice(targetIndex, 0, item);
+    
+    items = newItems;
+    editingIndex = null; // Exit edit mode
+  }
+
+  function startEditing(index: number) {
+    editingIndex = index;
+  }
+
+  function handleIndexKeydown(event: KeyboardEvent, currentIndex: number) {
+    if (event.key === 'Enter') {
+      const target = event.target as HTMLInputElement;
+      handleIndexChange(currentIndex, target.value);
+    } else if (event.key === 'Escape') {
+      editingIndex = null;
     }
-
-    // Perform the reorder
-    const draggedItem = items[dragIndex];
-    items.splice(dragIndex, 1);
-    // Adjust insert index after removal
-    const finalIndex = insertIndex > dragIndex ? insertIndex - 1 : insertIndex;
-    items.splice(finalIndex, 0, draggedItem);
-
-    resetDragState();
   }
 
-  function handleDragEnd(e: DragEvent) {
-    resetDragState();
-    if (e.target instanceof HTMLElement) {
-      e.target.classList.remove('dragging');
+  // Reactive configuration for optimal UX that updates with items
+  const dndConfig = $derived({
+    items,
+    flipDurationMs: 250, // Smooth flip animation
+    morphDisabled: false, // Enable morphing for smoother transitions
+    dropTargetStyle: { 
+      outline: '2px solid #3b82f6', 
+      outlineOffset: '2px',
+      backgroundColor: 'rgba(59, 130, 246, 0.08)' 
+    },
+    dragDisabled: editingIndex !== null, // Disable drag when editing index
+    zoneTabIndex: -1,
+    dropFromOthersDisabled: true, // Only allow internal reordering
+    transformDraggedElement: (element: HTMLElement | undefined, data: any) => {
+      // Custom transform for dragged element with null check
+      if (!element) return;
+      element.style.transform = 'rotate(2deg) scale(1.05)';
+      element.style.boxShadow = '0 20px 40px rgba(0, 0, 0, 0.3), 0 0 0 3px rgba(59, 130, 246, 0.7)';
+      element.style.zIndex = '1000';
+      element.style.opacity = '0.95';
+      element.style.backdropFilter = 'blur(8px)';
+      element.style.borderRadius = '12px';
+    },
+    centreDraggedOnCursor: true // Center the drag image on cursor
+  });
+
+  // Enhanced event handlers with better state management
+  function handleDndConsider(e: CustomEvent) {
+    const { items: newItems, info } = e.detail;
+    items = newItems;
+    
+    // Track drag state for visual feedback
+    if (info.source === SOURCES.KEYBOARD || info.source === SOURCES.POINTER) {
+      isDragActive = info.trigger === TRIGGERS.DRAG_STARTED;
     }
   }
 
-  function resetDragState() {
-    dragIndex = null;
-    dropIndicator = null;
+  function handleDndFinalize(e: CustomEvent) {
+    const { items: newItems, info } = e.detail;
+    items = newItems;
+    isDragActive = false;
+    
+    // Optional: Add haptic feedback for mobile devices
+    if (navigator.vibrate && info.trigger === TRIGGERS.DROPPED_INTO_ZONE) {
+      navigator.vibrate(50); // Subtle vibration feedback
+    }
   }
 
-  // --- Original Functions ---
+
+  // --- Enhanced Functions ---
   function remove(index: number) {
-    // Add a subtle animation for removal?
-    items.splice(index, 1);
+    // Add smooth removal animation
+    const itemToRemove = items[index];
+    
+    // Temporarily mark for removal animation
+    const element = document.querySelector(`[data-category-id="${itemToRemove.id}"]`);
+    if (element) {
+      element.classList.add('removing');
+      
+      setTimeout(() => {
+        items = items.filter((_, i) => i !== index);
+      }, 200); // Allow animation to complete
+    } else {
+      items = items.filter((_, i) => i !== index);
+    }
   }
 
   async function save() {
-    await saveCategories(items);
+    // Convert back to original Category format (remove our added properties)
+    const categoriesToSave = items.map(({ id, originalIndex, ...category }) => category);
+    await saveCategories(categoriesToSave);
     dispatch('save', items.map(c => c.name));
   }
 
@@ -142,11 +175,11 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
   }
 </script>
 
-<div class="modal-overlay" on:click={cancel} on:keydown={handleKeyDown}>
-  <div class="modal-content" on:click|stopPropagation>
+<div class="modal-overlay" onclick={cancel} onkeydown={handleKeyDown} role="button" tabindex="0">
+  <div class="modal-content" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="dialog" aria-labelledby="modal-title" tabindex="0">
     <div class="modal-header">
-      <h2>Edit Categories</h2>
-      <button class="close-button" on:click={cancel} aria-label="Close modal">
+      <h2 id="modal-title">Edit Categories</h2>
+      <button class="close-button" onclick={cancel} aria-label="Close modal">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
           <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
@@ -154,74 +187,104 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
     </div>
 
     <div class="modal-body">
-      <!-- Instructions for drag and drop -->
-      <p class="instructions">Drag categories to reorder them</p>
+      <p class="instructions">
+        {#if isDragActive}
+          <span class="drag-active-hint">🎯 Drop to reorder • Release to place</span>
+        {:else}
+          Drag categories by the handle or <strong>click the number</strong> to set position
+        {/if}
+      </p>
       
-      <div class="category-list">
-        {#each items as cat, i (cat.name)}
-          <div
-            class="category-item"
-            class:drag-over-above={dropIndicator?.index === i && dropIndicator?.position === 'above'}
-            class:drag-over-below={dropIndicator?.index === i && dropIndicator?.position === 'below'}
-            draggable="true"
-            on:dragstart={(e) => handleDragStart(e, i)}
-            on:dragover={(e) => handleDragOver(e, i)}
-            on:dragleave={handleDragLeave}
-            on:drop={(e) => handleDrop(e, i)}
-            on:dragend={handleDragEnd}
+      <!-- Enhanced dndzone with latest configuration -->
+      <div 
+        class="category-list"
+        class:drag-active={isDragActive}
+        use:dndzone={dndConfig}
+        onconsider={handleDndConsider}
+        onfinalize={handleDndFinalize}
+      >
+        {#each items as cat, i (cat.id)} <!-- Use unique stable ID -->
+          <div 
+            class="category-item" 
+            data-category-id={cat.id}
+            animate:flip={{ duration: 250, easing: (t) => t * (2 - t) }} 
             role="listitem"
+            tabindex="-1"
           >
-            <!-- Drag Handle -->
-            <div class="drag-handle" aria-hidden="true">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            
+            <!-- Enhanced Drag Handle -->
+            <div class="drag-handle" aria-label="Drag to reorder" title="Drag to reorder">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
                 <path d="M8 5H11M8 12H11M8 19H11M13 5H16M13 12H16M13 19H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
               </svg>
             </div>
 
             <!-- Category Info -->
             <div class="category-info">
-              <Icon name={cat.icon} size={24} color={cat.color} />
+              <div class="category-icon">
+                <Icon name={cat.icon} size={28} color={cat.color} />
+              </div>
               <span class="category-name">{cat.name}</span>
+              
+              <!-- Editable Category Index -->
+              <div class="category-index-container">
+                {#if editingIndex === i}
+                  <input 
+                    type="number"
+                    class="category-index-input"
+                    value={i + 1}
+                    min="1"
+                    max={items.length}
+                    onblur={(e) => handleIndexChange(i, e.target.value)}
+                    onkeydown={(e) => handleIndexKeydown(e, i)}
+                    aria-label={`Position for ${cat.name}`}
+                    autofocus
+                  />
+                {:else}
+                  <button 
+                    class="category-index"
+                    onclick={() => startEditing(i)}
+                    title="Click to edit position"
+                    aria-label={`Position ${i + 1}, click to edit`}
+                  >
+                    #{i + 1}
+                  </button>
+                {/if}
+              </div>
             </div>
 
             <!-- Delete Action -->
             <div class="category-actions">
               <button 
                 class="action-button delete"
-                on:click={() => remove(i)}
+                onclick={() => remove(i)}
                 aria-label={`Delete category ${cat.name}`}
+                title={`Delete ${cat.name}`}
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                   <path d="M19 7L18.1327 19.1425C18.0579 20.1891 17.187 21 16.1378 21H7.86224C6.81296 21 5.94209 20.1891 5.86732 19.1425L5 7M10 11V17M14 11V17M15 7V4C15 3.44772 14.5523 3 14 3H10C9.44772 3 9 3.44772 9 4V7M4 7H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
               </button>
             </div>
-            
-            <!-- Drop Indicators -->
-            {#if dropIndicator?.index === i && dropIndicator?.position === 'above'}
-              <div class="drop-indicator above"></div>
-            {/if}
-            {#if dropIndicator?.index === i && dropIndicator?.position === 'below'}
-              <div class="drop-indicator below"></div>
-            {/if}
           </div>
-          
-          <!-- Standalone indicator for end of list -->
-          {#if i === items.length - 1 && dropIndicator?.index === i && dropIndicator?.position === 'below'}
-            <div class="drop-indicator standalone-below"></div>
-          {/if}
         {/each}
         
-        <!-- Indicator for dropping at the very end if list is empty or if needed -->
         {#if items.length === 0}
-          <div class="empty-state">No categories yet</div>
+          <div class="empty-state">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" class="empty-icon">
+              <path d="M9 2C8.44772 2 8 2.44772 8 3V4H6C4.89543 4 4 4.89543 4 6V20C4 21.1046 4.89543 22 6 22H18C19.1046 22 20 21.1046 20 20V6C20 4.89543 19.1046 4 18 4H16V3C16 2.44772 15.5523 2 15 2H9Z" stroke="currentColor" stroke-width="2"/>
+              <path d="M8 10H16M8 14H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <p>No categories to manage</p>
+            <small>Add some categories first!</small>
+          </div>
         {/if}
       </div>
     </div>
 
     <div class="modal-footer">
-      <button class="btn secondary" on:click={cancel}>Cancel</button>
-      <button class="btn primary" on:click={save}>Save Changes</button>
+      <button class="btn secondary" onclick={cancel}>Cancel</button>
+      <button class="btn primary" onclick={save}>Save Changes</button>
     </div>
   </div>
 </div>
@@ -232,29 +295,30 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
   .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.6); /* Darker for better contrast */
+    background: rgba(0, 0, 0, 0.6);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 1000;
-    backdrop-filter: blur(6px); /* Slightly less blur for performance */
+    backdrop-filter: blur(6px);
   }
 
   .modal-content {
-    background: rgba(15, 23, 42, 0.92); /* Slightly less transparent */
-    border-radius: 18px; /* Slightly less rounded for a more professional look */
-    width: 380px; /* Slightly wider */
+    background: rgba(15, 23, 42, 0.92);
+    border-radius: 18px;
+    width: 380px;
     max-width: 95%;
     box-shadow: 
-      0 30px 60px -15px rgba(0, 0, 0, 0.5), /* Stronger shadow */
-      0 0 0 1px rgba(59, 130, 246, 0.25), /* More prominent border */
+      0 30px 60px -15px rgba(0, 0, 0, 0.5),
+      0 0 0 1px rgba(59, 130, 246, 0.25),
       0 0 0 2px rgba(30, 58, 138, 0.1);
     overflow: hidden;
     border: 1px solid rgba(59, 130, 246, 0.15);
-    backdrop-filter: blur(16px); /* More blur */
+    backdrop-filter: blur(16px);
     display: flex;
     flex-direction: column;
-    max-height: 90vh; /* Prevent modal from being taller than viewport */
+    max-height: 90vh;
+    user-select: none; /* Prevent text selection during drag */
   }
 
   .modal-header {
@@ -302,9 +366,12 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
   }
 
   .modal-body {
-    padding: 1.25rem 1.5rem; /* More padding */
+    padding: 1.25rem 1.5rem;
     overflow-y: auto;
-    flex-grow: 1; /* Take available space */
+    flex-grow: 1;
+    /* Enhance scrolling performance */
+    scroll-behavior: smooth;
+    overscroll-behavior: contain;
   }
   
   .instructions {
@@ -314,118 +381,390 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
     margin-bottom: 1rem;
     text-align: center;
     font-style: italic;
+    transition: all 0.3s ease;
+    min-height: 20px; /* Prevent layout shift */
   }
 
+  .drag-active-hint {
+    color: #3b82f6;
+    font-weight: 600;
+    font-style: normal;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+
+  /* Enhanced category list with modern CSS Grid for stability */
   .category-list {
     list-style: none;
     padding: 0;
     margin: 0;
-    position: relative; /* For absolute positioning of indicators */
+    position: relative;
+    transition: all 0.2s ease;
+    /* Use CSS Grid for more stable layouts during drag */
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+    /* Contain layout shifts */
+    contain: layout style;
   }
-  
+
+  .category-list.drag-active {
+    /* Subtle visual feedback when drag is active */
+    background-color: rgba(59, 130, 246, 0.02);
+    border-radius: 12px;
+    padding: 0.5rem;
+    margin: -0.5rem;
+    transition: all 0.3s ease;
+  }
+
+  /* Enhanced empty state */
   .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     color: #64748b;
     text-align: center;
-    padding: 2rem 1rem;
-    font-style: italic;
+    padding: 3rem 1rem;
+    gap: 1rem;
+    background-color: rgba(30, 41, 59, 0.3);
+    border-radius: 12px;
+    border: 2px dashed rgba(71, 85, 105, 0.3);
+  }
+
+  .empty-state .empty-icon {
+    color: #475569;
+    opacity: 0.7;
+  }
+
+  .empty-state p {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: #94a3b8;
+  }
+
+  .empty-state small {
+    color: #64748b;
+    font-size: 0.85rem;
   }
 
   .category-item {
-    display: flex;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
     align-items: center;
-    padding: 0.85rem 0.75rem; /* Adjusted padding */
-    border-radius: 10px; /* Rounded corners */
-    transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1); /* Smoother transition */
+    gap: 0.6rem;
+    padding: 0.875rem 1rem;
+    border-radius: 12px;
     position: relative;
-    background-color: rgba(30, 41, 59, 0.4); /* Subtle background */
-    border: 1px solid rgba(71, 85, 105, 0.2);
-    margin-bottom: 0.5rem; /* Space between items */
-  }
-
-  .category-item:last-child {
-    margin-bottom: 0;
-  }
-
-  /* Visual feedback for the item being dragged */
-  .category-item.dragging {
-    opacity: 0.6;
-    transform: scale(0.99);
-    box-shadow: 0 5px 15px -5px rgba(0, 0, 0, 0.3);
-    z-index: 2; /* Ensure it's above others */
-  }
-
-  /* Visual feedback for the drop target area */
-  .category-item.drag-over-above {
-    border-top: 2px solid #3b82f6;
-  }
-  .category-item.drag-over-below {
-    border-bottom: 2px solid #3b82f6;
-  }
-
-  /* Drag Handle */
-  .drag-handle {
-    color: #64748b; /* Muted color */
+    background: linear-gradient(135deg, 
+      rgba(30, 41, 59, 0.8) 0%, 
+      rgba(51, 65, 85, 0.6) 50%,
+      rgba(30, 41, 59, 0.8) 100%
+    );
+    border: 1px solid rgba(71, 85, 105, 0.3);
     cursor: grab;
-    padding: 0.3rem;
-    margin-right: 0.75rem; /* Increased space */
-    transition: color 0.2s ease;
+    
+    /* Modern glassmorphism effect */
+    backdrop-filter: blur(16px) saturate(180%);
+    box-shadow: 
+      0 4px 16px rgba(0, 0, 0, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    
+    /* Modern CSS for optimal performance */
+    contain: layout style paint;
+    will-change: transform, box-shadow, background-color;
+    
+    /* Advanced transitions using latest easing functions */
+    transition: 
+      transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+      box-shadow 0.3s cubic-bezier(0.25, 0.8, 0.25, 1),
+      background 0.25s ease,
+      border-color 0.25s ease,
+      opacity 0.2s ease,
+      backdrop-filter 0.25s ease;
+
+    transform-style: preserve-3d;
+  }
+
+  .category-item:hover {
+    background: linear-gradient(135deg, 
+      rgba(59, 130, 246, 0.12) 0%, 
+      rgba(30, 41, 59, 0.9) 30%,
+      rgba(79, 70, 229, 0.08) 70%,
+      rgba(30, 41, 59, 0.9) 100%
+    );
+    border-color: rgba(59, 130, 246, 0.5);
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 
+      0 12px 32px rgba(0, 0, 0, 0.2),
+      0 4px 16px rgba(59, 130, 246, 0.15),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(20px) saturate(200%);
+  }
+
+  .category-item:active {
+    cursor: grabbing;
+    transform: translateY(-1px) scale(1.03);
+    box-shadow: 
+      0 20px 40px rgba(0, 0, 0, 0.3),
+      0 8px 24px rgba(59, 130, 246, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  /* Modern CSS for optimal drag handle UX */
+  .drag-handle {
+    color: #64748b;
+    cursor: grab;
+    padding: 0.25rem;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
     display: flex;
     align-items: center;
     justify-content: center;
-    flex-shrink: 0; /* Prevent shrinking */
+    border-radius: 4px;
+    opacity: 0.3;
+    background: linear-gradient(135deg, 
+      rgba(71, 85, 105, 0.1) 0%, 
+      rgba(51, 65, 85, 0.05) 100%
+    );
+    border: 1px solid rgba(71, 85, 105, 0.08);
+    
+    /* Modern touch targets for accessibility */
+    min-width: 24px;
+    min-height: 24px;
+    
+    /* Enhance for modern browsers */
+    contain: layout style;
+    transform-style: preserve-3d;
+    backdrop-filter: blur(3px);
   }
 
   .drag-handle:hover {
     color: #e2e8f0;
+    background: linear-gradient(135deg, 
+      rgba(59, 130, 246, 0.2) 0%, 
+      rgba(79, 70, 229, 0.12) 50%,
+      rgba(59, 130, 246, 0.1) 100%
+    );
+    opacity: 1;
+    transform: scale(1.1) translateZ(0);
+    border-color: rgba(59, 130, 246, 0.4);
+    box-shadow: 
+      0 4px 12px rgba(59, 130, 246, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(10px) saturate(140%);
   }
 
   .category-item:active .drag-handle {
     cursor: grabbing;
+    background: linear-gradient(135deg, 
+      rgba(59, 130, 246, 0.3) 0%, 
+      rgba(79, 70, 229, 0.2) 50%,
+      rgba(59, 130, 246, 0.15) 100%
+    );
+    color: #3b82f6;
+    transform: scale(1.05) translateZ(0);
+    box-shadow: 
+      0 6px 16px rgba(59, 130, 246, 0.25),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
   }
 
+  /* Enhanced category info layout */
   .category-info {
     display: flex;
     align-items: center;
-    gap: 0.85rem; /* Increased gap */
-    flex-grow: 1;
+    gap: 0.6rem;
+    overflow: hidden; /* Prevent text overflow issues */
+  }
+
+  .category-icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, 
+      rgba(59, 130, 246, 0.15) 0%, 
+      rgba(79, 70, 229, 0.08) 100%
+    );
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    backdrop-filter: blur(8px);
+    box-shadow: 
+      0 2px 8px rgba(0, 0, 0, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  .category-item:hover .category-icon {
+    background: linear-gradient(135deg, 
+      rgba(59, 130, 246, 0.25) 0%, 
+      rgba(79, 70, 229, 0.15) 100%
+    );
+    border-color: rgba(59, 130, 246, 0.4);
+    transform: scale(1.1) rotateY(10deg);
+    box-shadow: 
+      0 4px 12px rgba(59, 130, 246, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
   }
 
   .category-name {
-    color: #f1f5f9; /* Lighter text */
-    font-size: 1rem; /* Slightly larger */
+    color: #f1f5f9;
+    font-size: 0.95rem;
     font-family: 'Inter', sans-serif;
     font-weight: 500;
+    flex-grow: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    letter-spacing: -0.01em;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  }
+
+  .category-index {
+    color: #64748b;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: linear-gradient(135deg, 
+      rgba(71, 85, 105, 0.3) 0%, 
+      rgba(51, 65, 85, 0.2) 100%
+    );
+    padding: 0.25rem 0.4rem;
+    border-radius: 6px;
+    min-width: 24px;
+    text-align: center;
+    font-family: 'Inter', monospace;
+    border: 1px solid rgba(71, 85, 105, 0.2);
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    backdrop-filter: blur(6px);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+    box-shadow: 
+      0 1px 3px rgba(0, 0, 0, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  }
+
+  .category-index:hover, .category-index:focus {
+    background: linear-gradient(135deg, 
+      rgba(59, 130, 246, 0.3) 0%, 
+      rgba(79, 70, 229, 0.2) 100%
+    );
+    color: #3b82f6;
+    border-color: rgba(59, 130, 246, 0.5);
+    outline: none;
+    transform: scale(1.1) translateY(-2px);
+    box-shadow: 
+      0 4px 12px rgba(59, 130, 246, 0.25),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  .category-index-container {
+    flex-shrink: 0;
+  }
+
+  .category-index-input {
+    width: 40px;
+    height: 28px;
+    background: linear-gradient(135deg, 
+      rgba(59, 130, 246, 0.2) 0%, 
+      rgba(79, 70, 229, 0.1) 100%
+    );
+    border: 2px solid #3b82f6;
+    border-radius: 6px;
+    color: #f1f5f9;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-align: center;
+    font-family: 'Inter', monospace;
+    outline: none;
+    transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    backdrop-filter: blur(10px);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    box-shadow: 
+      0 2px 8px rgba(59, 130, 246, 0.12),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  .category-index-input:focus {
+    background: linear-gradient(135deg, 
+      rgba(59, 130, 246, 0.3) 0%, 
+      rgba(79, 70, 229, 0.2) 100%
+    );
+    border-color: #2563eb;
+    box-shadow: 
+      0 0 0 4px rgba(59, 130, 246, 0.25),
+      0 8px 20px rgba(59, 130, 246, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    transform: scale(1.1) translateY(-2px);
+  }
+
+  .category-index-input::-webkit-outer-spin-button,
+  .category-index-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  .category-index-input[type=number] {
+    -moz-appearance: textfield;
   }
 
   .category-actions {
     display: flex;
-    gap: 0.25rem;
+    gap: 0.3rem;
   }
 
   .action-button {
-    background: none;
-    border: none;
+    background: linear-gradient(135deg, 
+      rgba(51, 65, 85, 0.25) 0%, 
+      rgba(30, 41, 59, 0.15) 100%
+    );
+    border: 1px solid rgba(71, 85, 105, 0.15);
     cursor: pointer;
     color: #94a3b8;
-    transition: all 0.2s ease;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
     padding: 0.4rem;
-    border-radius: 6px;
-    width: 34px;
-    height: 34px;
+    border-radius: 8px;
+    width: 32px;
+    height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
-    flex-shrink: 0; /* Prevent shrinking */
+    flex-shrink: 0;
+    backdrop-filter: blur(6px);
+    
+    /* Modern touch targets */
+    min-width: 32px;
+    min-height: 32px;
+    
+    box-shadow: 
+      0 1px 4px rgba(0, 0, 0, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.03);
   }
 
   .action-button:hover, .action-button:focus {
     color: #f1f5f9;
-    background-color: rgba(239, 68, 68, 0.1);
+    background: linear-gradient(135deg, 
+      rgba(239, 68, 68, 0.2) 0%, 
+      rgba(220, 38, 38, 0.15) 100%
+    );
+    border-color: rgba(239, 68, 68, 0.4);
     outline: none;
-    transform: translateY(-1px);
+    transform: translateY(-3px) scale(1.1);
+    box-shadow: 
+      0 6px 16px rgba(239, 68, 68, 0.25),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
   }
+  
   .action-button:active {
-    transform: translateY(0);
+    transform: translateY(0) scale(1.02);
   }
 
   .delete {
@@ -435,33 +774,7 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
   .delete:hover, .delete:focus {
     color: #ef4444;
     background-color: rgba(239, 68, 68, 0.15);
-  }
-
-  /* Drop Indicators */
-  .drop-indicator {
-    position: absolute;
-    height: 3px;
-    background-color: #3b82f6;
-    border-radius: 2px;
-    left: 0;
-    right: 0;
-    z-index: 3; /* Above items */
-    pointer-events: none; /* Don't interfere with drag events */
-  }
-  .drop-indicator.above {
-    top: -2px;
-    box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
-  }
-  .drop-indicator.below {
-    bottom: -2px;
-    box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
-  }
-  .drop-indicator.standalone-below {
-    position: relative;
-    top: 0.25rem;
-    margin-left: 3rem; /* Align with item content */
-    margin-right: 3rem;
-    box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
   }
 
   .modal-footer {
