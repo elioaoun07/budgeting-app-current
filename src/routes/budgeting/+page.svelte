@@ -2,6 +2,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fly, fade } from "svelte/transition";
+  import { flip } from 'svelte/animate';
   import { 
     currentAccount, 
     accounts, 
@@ -13,11 +14,13 @@
   } from '$lib/budgeting/store';
   import { localParse, updateKeywordMap } from '$lib/budgeting/localNLP.js';
   import CalculatorModal from '$lib/budgeting/CalculatorModal.svelte';
-  import AddAccountModal from '$lib/budgeting/AddAccountModal.svelte'; // Import is already here
+  import AddAccountModal from '$lib/budgeting/AddAccountModal.svelte';
   import Icon from '$lib/icons/Icon.svelte';
  	import Sidebar from '$lib/budgeting/Sidebar.svelte';
   import AddCategoryModal from '$lib/budgeting/AddCategoryModal.svelte';
   import CategoryManagementModal from '$lib/budgeting/CategoryManagementModal.svelte';
+  import OtherSubcategoryItem from '$lib/budgeting/OtherSubcategoryItem.svelte';
+  import { addSubcategory } from '$lib/budgeting/store';
 
   // Keep keyword map in sync
   $: updateKeywordMap($categories);
@@ -26,7 +29,7 @@
   let showCalc: boolean = false;
   let calcPrefill: string = '';
   let showAccountDropdown: boolean = false;
-  let showAddAccount: boolean = false; // State variable is here
+  let showAddAccount: boolean = false;
   let submitting: boolean = false;
   let salary: number | null = null;
 
@@ -40,6 +43,11 @@
   let showEditCategories = false;
   let wiggleMode = false;
   let longPressTimer: number;
+
+  // Drag and drop state
+  let draggedCategory: string | null = null;
+  let dragOverCategory: string | null = null;
+  let categoryPositions = new Map();
 
   // Computed values
   $: currentCat = $categories.find(c => c.name === selectedMain);
@@ -77,6 +85,8 @@
 
   function exitWiggleMode() {
     wiggleMode = false;
+    draggedCategory = null;
+    dragOverCategory = null;
   }
 
   function handleSaveCategories(event: CustomEvent<string[]>) {
@@ -90,10 +100,56 @@
 		showEditCategories = false;
   	}
 
-
 	function handleCancelEdit() {
 		showEditCategories = false;
 	}
+
+  // Drag and drop handlers
+  function handleDragStart(event: DragEvent, categoryName: string) {
+    if (!wiggleMode) return;
+    draggedCategory = categoryName;
+    (event.target as HTMLElement).classList.add('dragging');
+    event.dataTransfer?.setData('text/plain', categoryName);
+  }
+
+  function handleDragOver(event: DragEvent) {
+    event.preventDefault();
+  }
+
+  function handleDragEnter(event: DragEvent, categoryName: string) {
+    if (!wiggleMode || !draggedCategory) return;
+    dragOverCategory = categoryName;
+    (event.target as HTMLElement).classList.add('drag-over');
+  }
+
+  function handleDragLeave(event: DragEvent) {
+    (event.target as HTMLElement).classList.remove('drag-over');
+  }
+
+  function handleDrop(event: DragEvent, targetCategory: string) {
+    event.preventDefault();
+    if (!draggedCategory || draggedCategory === targetCategory) return;
+
+    const oldIndex = $categories.findIndex(c => c.name === draggedCategory);
+    const newIndex = $categories.findIndex(c => c.name === targetCategory);
+
+    const newCategories = [...$categories];
+    const [moved] = newCategories.splice(oldIndex, 1);
+    newCategories.splice(newIndex, 0, moved);
+
+    // Save with animation
+    saveCategories(newCategories);
+    
+    // Clean up
+    draggedCategory = null;
+    dragOverCategory = null;
+  }
+
+  function handleDragEnd(event: DragEvent) {
+    (event.target as HTMLElement).classList.remove('dragging');
+    draggedCategory = null;
+    dragOverCategory = null;
+  }
 
   // Expense submission
   async function submit() {
@@ -172,6 +228,23 @@
     };
   });
 
+  // Handler when OtherSubcategoryItem requests creation of a new sub
+  async function handleCreateSub(event: CustomEvent<string>) {
+    const name = (event.detail || '').trim();
+    if (!name || !selectedMain) return;
+    try {
+      await addSubcategory(selectedMain, name);
+      selectedSub = name;
+    } catch (err) {
+      console.error('Failed to add subcategory', err);
+    }
+  }
+
+  function handleSelectSub(event: CustomEvent<string>) {
+    const name = event.detail;
+    if (name) selectedSub = name;
+  }
+
   // Keyboard shortcuts
   function handleKeyDown(e: KeyboardEvent) {
     // Ctrl+Enter to submit
@@ -183,6 +256,55 @@
     else if (e.key === 'Escape') {
       showCalc = false;
     }
+  }
+
+  // Capture positions for FLIP animation
+  function captureCategoryPositions() {
+    categoryPositions.clear();
+    const categoryElements = document.querySelectorAll('.cat-button');
+    categoryElements.forEach(el => {
+      const name = el.querySelector('div')?.textContent;
+      if (name) {
+        categoryPositions.set(name, el.getBoundingClientRect());
+      }
+    });
+  }
+
+  // Apply FLIP animation after update
+  function applyFlipAnimation() {
+    const categoryElements = document.querySelectorAll('.cat-button');
+    categoryElements.forEach(el => {
+      const name = el.querySelector('div')?.textContent;
+      if (name && categoryPositions.has(name)) {
+        const oldPos = categoryPositions.get(name);
+        const newPos = el.getBoundingClientRect();
+        const deltaX = oldPos.left - newPos.left;
+        const deltaY = oldPos.top - newPos.top;
+        
+        el.animate(
+          [
+            { transform: `translate(${deltaX}px, ${deltaY}px)` },
+            { transform: 'translate(0, 0)' }
+          ],
+          {
+            duration: 300,
+            easing: 'ease-out'
+          }
+        );
+      }
+    });
+  }
+
+  // Capture positions before drag
+  function handleDragStartWithPosition(e, categoryName) {
+    captureCategoryPositions();
+    handleDragStart(e, categoryName);
+  }
+
+  // Apply animation after drop
+  function handleDropWithAnimation(e, targetCategory) {
+    handleDrop(e, targetCategory);
+    setTimeout(applyFlipAnimation, 0);
   }
 </script>
 
@@ -570,6 +692,18 @@
     animation-delay: 0.3s;
   }
 
+  /* Drag and drop styles */
+  .cat-button.dragging {
+    opacity: 0.5;
+    transform: scale(0.95);
+  }
+
+  .cat-button.drag-over {
+    border-color: var(--color-primary);
+    background: var(--color-primary-light);
+    transform: scale(1.05);
+  }
+
   /* Exit wiggle button */
   .exit-wiggle {
     position: fixed;
@@ -924,8 +1058,6 @@
       on:cancel={handleCancel}
     />
   {/if}
-  <!-- Or simply: -->
-  <!-- <AddCategoryModal bind:visible={showAddModal} on:save={(e) => { createCategory(e.detail.name, e.detail.icon, e.detail.color); showAddModal = false; }} on:cancel={() => (showAddModal = false)} /> -->
 
   <div class="section">
     <h3 class="section-title">Category</h3>
@@ -941,6 +1073,14 @@
           on:pointerleave={handleCategoryPointerLeave}
           aria-pressed={cat.name === selectedMain}
           in:fly={{ y: 10, duration: 300, delay: i * 30 }}
+          
+          draggable={wiggleMode}
+          on:dragstart={(e) => handleDragStartWithPosition(e, cat.name)}
+          on:dragover|preventDefault={handleDragOver}
+          on:dragenter={(e) => handleDragEnter(e, cat.name)}
+          on:dragleave={handleDragLeave}
+          on:drop={(e) => handleDropWithAnimation(e, cat.name)}
+          on:dragend={handleDragEnd}
         >
           <Icon name={cat.icon} size={24} color={cat.color} />
           <div>{cat.name}</div>
@@ -978,6 +1118,13 @@
             {sub}
           </div>
         {/each}
+        <!-- Render the editable "Other" row which can create a new subcategory -->
+        <OtherSubcategoryItem
+          categoryName={selectedMain}
+          selected={selectedSub}
+          on:create={handleCreateSub}
+          on:select={handleSelectSub}
+        />
       </div>
     </div>
   {/if}
@@ -1023,7 +1170,6 @@
         Add Expense
       {/if}
     </button>
-    <!--div class="shortcut-hint">Tip Placeholder</div-->
   </div>
 
  <div style="position: fixed; top: 10px; left: 10px; z-index: 1000;">
@@ -1067,4 +1213,4 @@
     </button>
   {/if}
 
-</div> <!-- .page closes here -->
+</div>

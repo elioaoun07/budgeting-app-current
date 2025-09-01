@@ -127,6 +127,22 @@ export async function createCategory(
   await saveCategories([...get(categories), newCat]);
 }
 
+/*
+ * Add a new subcategory to an existing category and persist.
+ * If the sub already exists, this is a no-op.
+ */
+export async function addSubcategory(categoryName: string, subName: string) {
+  const list = get(categories).map(c => ({ ...c, subs: Array.isArray(c.subs) ? [...c.subs] : [] }));
+  const idx = list.findIndex(c => c.name === categoryName);
+  if (idx === -1) return;
+  const subs = list[idx].subs;
+  if (!subs.includes(subName)) {
+    subs.push(subName);
+    list[idx].subs = subs;
+    await saveCategories(list);
+  }
+}
+
 /* ────────────────────────────────────────────────────────────
    3. Legacy alias so old components can still import rawPrefs
 ────────────────────────────────────────────────────────────── */

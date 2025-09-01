@@ -97,17 +97,6 @@ Notes   ▸ Responsive design, mobile sidebar, animated welcome, improved input/
     transactionsExpanded = !transactionsExpanded;
   }
 
-  // Dispatch events to the main page for modal triggers
-  function dispatchAddCategory() {
-    // Create custom event that can be listened to by child components
-    window.dispatchEvent(new CustomEvent('requestAddCategory'));
-  }
-
-  function dispatchAddAccount() {
-    // Create custom event that can be listened to by child components  
-    window.dispatchEvent(new CustomEvent('requestAddAccount'));
-  }
-
   function dispatchEditCategories() {
     // Create custom event for editing categories
     window.dispatchEvent(new CustomEvent('requestEditCategories'));
@@ -289,31 +278,12 @@ Notes   ▸ Responsive design, mobile sidebar, animated welcome, improved input/
               </a>
             </li>
             <li class="sub-nav-item">
-              <button class="sub-nav-link" on:click={() => dispatchAddCategory()}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 2V22M2 12H22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                  <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
-                </svg>
-                Add Category
-              </button>
-            </li>
-            <li class="sub-nav-item">
               <button class="sub-nav-link" on:click={() => dispatchEditCategories()}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                   <path d="M11 4H4C3.46957 4 2.96086 4.21071 2.58579 4.58579C2.21071 4.96086 2 5.46957 2 6V20C2 20.5304 2.21071 21.0391 2.58579 21.4142C2.96086 21.7893 3.46957 22 4 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                   <path d="M18.5 2.50002C18.8978 2.10218 19.4374 1.87866 20 1.87866C20.5626 1.87866 21.1022 2.10218 21.5 2.50002C21.8978 2.89785 22.1213 3.43738 22.1213 4.00002C22.1213 4.56266 21.8978 5.10218 21.5 5.50002L12 15L8 16L9 12L18.5 2.50002Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
                 Edit Categories
-              </button>
-            </li>
-            <li class="sub-nav-item">
-              <button class="sub-nav-link" on:click={() => dispatchAddAccount()}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <path d="M16 21V19C16 17.9391 15.5786 16.9217 14.8284 16.1716C14.0783 15.4214 13.0609 15 12 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                  <circle cx="8.5" cy="7" r="4" stroke="currentColor" stroke-width="2"/>
-                  <path d="M20 8V14M17 11H23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                </svg>
-                Add Account
               </button>
             </li>
           </ul>

@@ -41,12 +41,15 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
     initialCategories.map((c, index) => ({ 
       ...c, 
       id: `category-${c.name}-${index}`, // Unique stable ID
-      originalIndex: index 
+      originalIndex: index,
+      subItems: (c.subs || []).map((s, idx) => ({ id: `sub-${c.id}-${idx}-${s}`, name: s }))
     }))
   );
 
   let isDragActive = $state(false);
   let editingIndex = $state<number | null>(null);
+  // Track which categories are expanded to show their subcategories
+  let expandedCategories = $state(new Set<string>());
 
   // Function to handle index changes
   function handleIndexChange(currentIndex: number, newPosition: string) {
@@ -88,6 +91,31 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
     } else if (event.key === 'Escape') {
       editingIndex = null;
     }
+  }
+
+  // Toggle category expansion
+  function toggleCategoryExpansion(categoryId: string) {
+    if (expandedCategories.has(categoryId)) {
+      expandedCategories.delete(categoryId);
+    } else {
+      expandedCategories.add(categoryId);
+    }
+    // Create new Set to trigger reactivity
+    expandedCategories = new Set(expandedCategories);
+  }
+
+  // Handle nested-sub dnd consider/finalize for a specific category index
+  function handleSubDndConsider(catIndex: number, e: CustomEvent) {
+    // We update the visual order immediately for better feedback
+    const { items: newSubItems } = e.detail;
+    items[catIndex].subItems = newSubItems;
+    items[catIndex].subs = newSubItems.map(item => item.name);
+  }
+
+  function handleSubDndFinalize(catIndex: number, e: CustomEvent) {
+    const { items: newSubItems } = e.detail;
+    items[catIndex].subItems = newSubItems;
+    items[catIndex].subs = newSubItems.map(item => item.name);
   }
 
   // Reactive configuration for optimal UX that updates with items
@@ -157,9 +185,15 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
     }
   }
 
+  function removeSub(categoryIndex: number, subIndex: number) {
+    const cat = items[categoryIndex];
+    cat.subItems.splice(subIndex, 1);
+    cat.subs = cat.subItems.map(item => item.name);
+  }
+
   async function save() {
     // Convert back to original Category format (remove our added properties)
-    const categoriesToSave = items.map(({ id, originalIndex, ...category }) => category);
+    const categoriesToSave = items.map(({ id, originalIndex, subItems, ...category }) => category);
     await saveCategories(categoriesToSave);
     dispatch('save', items.map(c => c.name));
   }
@@ -204,68 +238,116 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
         onfinalize={handleDndFinalize}
       >
         {#each items as cat, i (cat.id)} <!-- Use unique stable ID -->
-          <div 
-            class="category-item" 
-            data-category-id={cat.id}
-            animate:flip={{ duration: 250, easing: (t) => t * (2 - t) }} 
-            role="listitem"
-            tabindex="-1"
-          >
-            
-            <!-- Enhanced Drag Handle -->
-            <div class="drag-handle" aria-label="Drag to reorder" title="Drag to reorder">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
-                <path d="M8 5H11M8 12H11M8 19H11M13 5H16M13 12H16M13 19H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-              </svg>
-            </div>
-
-            <!-- Category Info -->
-            <div class="category-info">
-              <div class="category-icon">
-                <Icon name={cat.icon} size={28} color={cat.color} />
-              </div>
-              <span class="category-name">{cat.name}</span>
+          <div animate:flip={{ duration: 250, easing: (t) => t * (2 - t) }}>
+            <div 
+              class="category-item" 
+              data-category-id={cat.id}
+              role="listitem"
+              tabindex="-1"
+            >
               
-              <!-- Editable Category Index -->
-              <div class="category-index-container">
-                {#if editingIndex === i}
-                  <input 
-                    type="number"
-                    class="category-index-input"
-                    value={i + 1}
-                    min="1"
-                    max={items.length}
-                    onblur={(e) => handleIndexChange(i, e.target.value)}
-                    onkeydown={(e) => handleIndexKeydown(e, i)}
-                    aria-label={`Position for ${cat.name}`}
-                    autofocus
-                  />
-                {:else}
-                  <button 
-                    class="category-index"
-                    onclick={() => startEditing(i)}
-                    title="Click to edit position"
-                    aria-label={`Position ${i + 1}, click to edit`}
-                  >
-                    #{i + 1}
-                  </button>
-                {/if}
+              <!-- Enhanced Drag Handle -->
+              <div class="drag-handle" aria-label="Drag to reorder" title="Drag to reorder">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
+                  <path d="M8 5H11M8 12H11M8 19H11M13 5H16M13 12H16M13 19H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </div>
+
+              <!-- Category Info -->
+              <div class="category-info">
+                                <div class="category-icon" onclick={() => toggleCategoryExpansion(cat.id)} style="cursor:pointer;">
+                  <Icon name={cat.icon} size={28} color={cat.color} />
+                </div>
+                                <span class="category-name" onclick={() => toggleCategoryExpansion(cat.id)} style="cursor:pointer;">{cat.name}</span>
+                
+                <!-- Editable Category Index -->
+                <div class="category-index-container">
+                  {#if editingIndex === i}
+                    <input 
+                      type="number"
+                      class="category-index-input"
+                      value={i + 1}
+                      min="1"
+                      max={items.length}
+                      onblur={(e) => handleIndexChange(i, e.target.value)}
+                      onkeydown={(e) => handleIndexKeydown(e, i)}
+                      aria-label={`Position for ${cat.name}`}
+                      autofocus
+                    />
+                  {:else}
+                    <button 
+                      class="category-index"
+                      onclick={() => startEditing(i)}
+                      title="Click to edit position"
+                      aria-label={`Position ${i + 1}, click to edit`}
+                    >
+                      #{i + 1}
+                    </button>
+                  {/if}
+                </div>
+              </div>
+
+              <!-- Delete Action -->
+              <div class="category-actions">
+                <button 
+                  class="action-button delete"
+                  onclick={() => remove(i)}
+                  aria-label={`Delete category ${cat.name}`}
+                  title={`Delete ${cat.name}`}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path d="M19 7L18.1327 19.1425C18.0579 20.1891 17.187 21 16.1378 21H7.86224C6.81296 21 5.94209 20.1891 5.86732 19.1425L5 7M10 11V17M14 11V17M15 7V4C15 3.44772 14.5523 3 14 3H10C9.44772 3 9 3.44772 9 4V7M4 7H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
               </div>
             </div>
 
-            <!-- Delete Action -->
-            <div class="category-actions">
-              <button 
-                class="action-button delete"
-                onclick={() => remove(i)}
-                aria-label={`Delete category ${cat.name}`}
-                title={`Delete ${cat.name}`}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <path d="M19 7L18.1327 19.1425C18.0579 20.1891 17.187 21 16.1378 21H7.86224C6.81296 21 5.94209 20.1891 5.86732 19.1425L5 7M10 11V17M14 11V17M15 7V4C15 3.44772 14.5523 3 14 3H10C9.44772 3 9 3.44772 9 4V7M4 7H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </button>
-            </div>
+            <!-- Subcategories Section -->
+            {#if expandedCategories.has(cat.id) && Array.isArray(cat.subs) && cat.subs.length > 0}
+              <div class="subcategory-section">
+                <div 
+                  class="subcategory-list"
+                  use:dndzone={{ items: cat.subItems, flipDurationMs: 180, dropFromOthersDisabled: true }}
+                  onconsider={(e) => handleSubDndConsider(i, e)}
+                  onfinalize={(e) => handleSubDndFinalize(i, e)}
+                >
+                  {#each cat.subItems as sub, si (sub.id)}
+                    <div class="subcategory-item" role="listitem">
+                      <div class="subcategory-content">
+                        <!-- Subcategory Drag Handle -->
+                        <div class="subcategory-drag-handle" aria-label="Drag to reorder" title="Drag to reorder">
+                          <svg width="8" height="8" viewBox="0 0 24 24" fill="none">
+                            <path d="M8 5H11M8 12H11M8 19H11M13 5H16M13 12H16M13 19H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                          </svg>
+                        </div>
+                        
+                        <!-- Subcategory Name -->
+                        <div class="subcategory-name">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="opacity: 0.7; margin-right: 8px;">
+                            <path d="M9 6L15 12L9 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                          </svg>
+                          {sub.name}
+                        </div>
+
+                        <!-- Delete Action -->
+                        <div class="subcategory-actions">
+                          <button 
+                            class="action-button delete"
+                            onclick={() => removeSub(i, si)}
+                            aria-label={`Delete subcategory ${sub.name}`}
+                            title={`Delete ${sub.name}`}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                              <path d="M19 7L18.1327 19.1425C18.0579 20.1891 17.187 21 16.1378 21H7.86224C6.81296 21 5.94209 20.1891 5.86732 19.1425L5 7M10 11V17M14 11V17M15 7V4C15 3.44772 14.5523 3 14 3H10C9.44772 3 9 3.44772 9 4V7M4 7H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {/if}
           </div>
         {/each}
         
@@ -714,6 +796,7 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
 
   .category-index-input[type=number] {
     -moz-appearance: textfield;
+    appearance: textfield;
   }
 
   .category-actions {
@@ -775,6 +858,74 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
     color: #ef4444;
     background-color: rgba(239, 68, 68, 0.15);
     box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
+  }
+
+  /* Subcategory Styles */
+  .subcategory-section {
+    margin-top: 0.5rem;
+    margin-left: 2.5rem;
+    border-left: 2px solid rgba(59, 130, 246, 0.3);
+    padding-left: 1rem;
+  }
+
+  .subcategory-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .subcategory-item {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem;
+    border-radius: 8px;
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid rgba(71, 85, 105, 0.2);
+    cursor: grab;
+    transition: all 0.2s ease;
+  }
+
+  .subcategory-item:hover {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: rgba(59, 130, 246, 0.4);
+    transform: translateY(-1px);
+  }
+
+  .subcategory-content {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    width: 100%;
+    gap: 0.6rem;
+  }
+
+  .subcategory-drag-handle {
+    color: #64748b;
+    cursor: grab;
+    padding: 0.2rem;
+    margin-right: 0.5rem;
+    opacity: 0.5;
+    transition: all 0.2s ease;
+    border-radius: 2px;
+  }
+
+  .subcategory-drag-handle:hover {
+    color: #3b82f6;
+    opacity: 1;
+    background: rgba(59, 130, 246, 0.1);
+  }
+
+  .subcategory-name {
+    color: #cbd5e1;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    flex-grow: 1;
+  }
+
+  .subcategory-actions {
+    display: flex;
+    gap: 0.3rem;
   }
 
   .modal-footer {
