@@ -48,6 +48,9 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
 
   let isDragActive = $state(false);
   let editingIndex = $state<number | null>(null);
+  // Inline rename state for category names
+  let editingNameIndex = $state<number | null>(null);
+  let editingNameValue = $state('');
   // Track which categories are expanded to show their subcategories
   let expandedCategories = $state(new Set<string>());
 
@@ -82,6 +85,30 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
 
   function startEditing(index: number) {
     editingIndex = index;
+  }
+
+  function startEditingName(index: number) {
+    editingNameIndex = index;
+    editingNameValue = items[index]?.name ?? '';
+    // focus will be attempted after DOM update via autofocus on input
+  }
+
+  function saveName(index: number) {
+    if (editingNameIndex === null) return;
+    items[index].name = editingNameValue;
+    // also keep id stable but name updated for saving
+    editingNameIndex = null;
+    editingNameValue = '';
+  }
+
+  function handleNameKeydown(event: KeyboardEvent, index: number) {
+    if (event.key === 'Enter') {
+      // commit
+      (event.target as HTMLInputElement).blur();
+    } else if (event.key === 'Escape') {
+      editingNameIndex = null;
+      editingNameValue = '';
+    }
   }
 
   function handleIndexKeydown(event: KeyboardEvent, currentIndex: number) {
@@ -191,6 +218,22 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
     cat.subs = cat.subItems.map(item => item.name);
   }
 
+  function addSub(categoryIndex: number) {
+    const cat = items[categoryIndex];
+    const newSub = { id: `sub-${cat.id}-${Date.now()}`, name: 'New subcategory' };
+    cat.subItems = cat.subItems || [];
+    cat.subItems.push(newSub);
+    cat.subs = cat.subItems.map(item => item.name);
+    // open the category so user sees the new sub
+    expandedCategories.add(cat.id);
+    expandedCategories = new Set(expandedCategories);
+    // Focus management: try to focus last sub item input after DOM updates
+    setTimeout(() => {
+      const el = document.querySelector(`[data-category-id="${cat.id}"] .subcategory-list .subcategory-item:last-child input`);
+      if (el) (el as HTMLInputElement).focus();
+    }, 50);
+  }
+
   async function save() {
     // Convert back to original Category format (remove our added properties)
     const categoriesToSave = items.map(({ id, originalIndex, subItems, ...category }) => category);
@@ -247,7 +290,7 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
             >
               
               <!-- Enhanced Drag Handle -->
-              <div class="drag-handle" aria-label="Drag to reorder" title="Drag to reorder">
+              <div class="drag-handle" aria-label="Drag to reorder" title="Drag to reorder" onclick={(e) => e.stopPropagation()}>
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
                   <path d="M8 5H11M8 12H11M8 19H11M13 5H16M13 12H16M13 19H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                 </svg>
@@ -255,10 +298,21 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
 
               <!-- Category Info -->
               <div class="category-info">
-                                <div class="category-icon" onclick={() => toggleCategoryExpansion(cat.id)} style="cursor:pointer;">
+                <div class="category-icon" style="cursor:pointer;">
                   <Icon name={cat.icon} size={28} color={cat.color} />
                 </div>
-                                <span class="category-name" onclick={() => toggleCategoryExpansion(cat.id)} style="cursor:pointer;">{cat.name}</span>
+                {#if editingNameIndex === i}
+                  <input
+                    class="category-name"
+                    value={editingNameValue}
+                    oninput={(e) => editingNameValue = e.target.value}
+                    onblur={() => saveName(i)}
+                    onkeydown={(e) => handleNameKeydown(e, i)}
+                    autofocus
+                  />
+                {:else}
+                  <div class="category-name" title="Category name">{cat.name}</div>
+                {/if}
                 
                 <!-- Editable Category Index -->
                 <div class="category-index-container">
@@ -277,7 +331,7 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
                   {:else}
                     <button 
                       class="category-index"
-                      onclick={() => startEditing(i)}
+                      onclick={(e) => { e.stopPropagation(); startEditing(i); }}
                       title="Click to edit position"
                       aria-label={`Position ${i + 1}, click to edit`}
                     >
@@ -291,7 +345,7 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
               <div class="category-actions">
                 <button 
                   class="action-button delete"
-                  onclick={() => remove(i)}
+                  onclick={(e) => { e.stopPropagation(); remove(i); }}
                   aria-label={`Delete category ${cat.name}`}
                   title={`Delete ${cat.name}`}
                 >
@@ -299,53 +353,89 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
                     <path d="M19 7L18.1327 19.1425C18.0579 20.1891 17.187 21 16.1378 21H7.86224C6.81296 21 5.94209 20.1891 5.86732 19.1425L5 7M10 11V17M14 11V17M15 7V4C15 3.44772 14.5523 3 14 3H10C9.44772 3 9 3.44772 9 4V7M4 7H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                   </svg>
                 </button>
+                <!-- Pencil edit button (rename) -->
+                <button
+                  class="action-button"
+                  onclick={(e) => { e.stopPropagation(); startEditingName(i); }}
+                  aria-label={`Rename category ${cat.name}`}
+                  title="Rename"
+                >
+                  <!-- reuse Icon component if available -->
+                  <Icon name="pencil" />
+                </button>
+
+                <!-- Chevron expand/collapse button -->
+                <button
+                  class="action-button"
+                  onclick={(e) => { e.stopPropagation(); toggleCategoryExpansion(cat.id); }}
+                  aria-expanded={expandedCategories.has(cat.id)}
+                  aria-label={expandedCategories.has(cat.id) ? 'Collapse category' : 'Expand category'}
+                  title={expandedCategories.has(cat.id) ? 'Collapse' : 'Expand'}
+                >
+                  <Icon name={expandedCategories.has(cat.id) ? 'chevron-up' : 'chevron-down'} />
+                </button>
               </div>
             </div>
 
-            <!-- Subcategories Section -->
-            {#if expandedCategories.has(cat.id) && Array.isArray(cat.subs) && cat.subs.length > 0}
+            <!-- Subcategory Section -->
+            {#if expandedCategories.has(cat.id)}
               <div class="subcategory-section">
-                <div 
-                  class="subcategory-list"
-                  use:dndzone={{ items: cat.subItems, flipDurationMs: 180, dropFromOthersDisabled: true }}
-                  onconsider={(e) => handleSubDndConsider(i, e)}
-                  onfinalize={(e) => handleSubDndFinalize(i, e)}
-                >
-                  {#each cat.subItems as sub, si (sub.id)}
-                    <div class="subcategory-item" role="listitem">
-                      <div class="subcategory-content">
-                        <!-- Subcategory Drag Handle -->
-                        <div class="subcategory-drag-handle" aria-label="Drag to reorder" title="Drag to reorder">
-                          <svg width="8" height="8" viewBox="0 0 24 24" fill="none">
-                            <path d="M8 5H11M8 12H11M8 19H11M13 5H16M13 12H16M13 19H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                          </svg>
-                        </div>
-                        
-                        <!-- Subcategory Name -->
-                        <div class="subcategory-name">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="opacity: 0.7; margin-right: 8px;">
-                            <path d="M9 6L15 12L9 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                          </svg>
-                          {sub.name}
-                        </div>
-
-                        <!-- Delete Action -->
-                        <div class="subcategory-actions">
-                          <button 
-                            class="action-button delete"
-                            onclick={() => removeSub(i, si)}
-                            aria-label={`Delete subcategory ${sub.name}`}
-                            title={`Delete ${sub.name}`}
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                              <path d="M19 7L18.1327 19.1425C18.0579 20.1891 17.187 21 16.1378 21H7.86224C6.81296 21 5.94209 20.1891 5.86732 19.1425L5 7M10 11V17M14 11V17M15 7V4C15 3.44772 14.5523 3 14 3H10C9.44772 3 9 3.44772 9 4V7M4 7H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                {#if Array.isArray(cat.subs) && cat.subs.length > 0}
+                  <div 
+                    class="subcategory-list"
+                    use:dndzone={{ items: cat.subItems, flipDurationMs: 180, dropFromOthersDisabled: true }}
+                    onconsider={(e) => handleSubDndConsider(i, e)}
+                    onfinalize={(e) => handleSubDndFinalize(i, e)}
+                  >
+                    {#each cat.subItems as sub, si (sub.id)}
+                      <div class="subcategory-item" role="listitem">
+                        <div class="subcategory-content">
+                          <!-- Subcategory Drag Handle -->
+                          <div class="subcategory-drag-handle" aria-label="Drag to reorder" title="Drag to reorder">
+                            <svg width="8" height="8" viewBox="0 0 24 24" fill="none">
+                              <path d="M8 5H11M8 12H11M8 19H11M13 5H16M13 12H16M13 19H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                             </svg>
-                          </button>
+                          </div>
+                          
+                          <!-- Subcategory Name -->
+                          <div class="subcategory-name">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="opacity: 0.7; margin-right: 8px;">
+                              <path d="M9 6L15 12L9 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            {sub.name}
+                          </div>
+
+                          <!-- Delete Action -->
+                          <div class="subcategory-actions">
+                            <button 
+                              class="action-button delete"
+                              onclick={() => removeSub(i, si)}
+                              aria-label={`Delete subcategory ${sub.name}`}
+                              title={`Delete ${sub.name}`}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                                <path d="M19 7L18.1327 19.1425C18.0579 20.1891 17.187 21 16.1378 21H7.86224C6.81296 21 5.94209 20.1891 5.86732 19.1425L5 7M10 11V17M14 11V17M15 7V4C15 3.44772 14.5523 3 14 3H10C9.44772 3 9 3.44772 9 4V7M4 7H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                              </svg>
+                            </button>
+                          </div>
                         </div>
                       </div>
+                    {/each}
+                  </div>
+                {:else}
+                  <div class="no-subcategories">
+                    <div style="display:flex;align-items:center;gap:0.6rem;">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style="opacity:0.6; margin-right:8px;">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" stroke="currentColor" stroke-width="1.2"/>
+                      </svg>
+                      <div>
+                        <div style="font-weight:600">No subcategories</div>
+                        <small>Tap "Add" to create a subcategory</small>
+                      </div>
                     </div>
-                  {/each}
-                </div>
+                    <button class="add-sub" onclick={() => addSub(i)}>Add</button>
+                  </div>
+                {/if}
               </div>
             {/if}
           </div>
@@ -605,7 +695,7 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
   .drag-handle {
     color: #64748b;
     cursor: grab;
-    padding: 0.25rem;
+    padding: 0.5rem; /* larger touch target */
     transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
     display: flex;
     align-items: center;
@@ -630,13 +720,9 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
 
   .drag-handle:hover {
     color: #e2e8f0;
-    background: linear-gradient(135deg, 
-      rgba(59, 130, 246, 0.2) 0%, 
-      rgba(79, 70, 229, 0.12) 50%,
-      rgba(59, 130, 246, 0.1) 100%
-    );
-    opacity: 1;
-    transform: scale(1.1) translateZ(0);
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.12) 0%, rgba(79, 70, 229, 0.06) 50%);
+    opacity: 0.9;
+    transform: none; /* remove large scaling for stability */
     border-color: rgba(59, 130, 246, 0.4);
     box-shadow: 
       0 4px 12px rgba(59, 130, 246, 0.2),
@@ -872,6 +958,29 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+  }
+
+  .no-subcategories {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #94a3b8;
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    background: rgba(30,41,59,0.4);
+    border: 1px dashed rgba(71,85,105,0.12);
+    margin-left: 0.25rem;
+    justify-content: space-between;
+  }
+
+  .no-subcategories .add-sub {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    padding: 0.35rem 0.6rem;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
   }
 
   .subcategory-item {

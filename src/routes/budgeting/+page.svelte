@@ -1144,7 +1144,15 @@
           step="0.01"
           autocomplete="off"
         />
-        <button class="calc-btn" on:click={openCalculator}>🧮</button>
+        <button class="calc-btn" on:click={openCalculator}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="4" y="2" width="16" height="20" rx="2"/>
+            <path d="M8 6h8"/>
+            <path d="M8 10h8"/>
+            <path d="M8 14h4"/>
+            <path d="M12 18h4"/>
+          </svg>
+        </button>
       </div>
     </div>
 
@@ -1175,9 +1183,9 @@
   </div>
 
  <div style="position: fixed; top: 10px; left: 10px; z-index: 1000;">
-    <button on:click={openSidebar} style="font-size: 24px; background:none; border:none; cursor:pointer; color:aliceblue">
+    <!-- <button on:click={openSidebar} style="font-size: 24px; background:none; border:none; cursor:pointer; color:aliceblue">
       ☰
-    </button>
+    </button> -->
   </div>
 
   <Sidebar
