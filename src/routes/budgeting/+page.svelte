@@ -179,12 +179,14 @@
         amount = '';
         selectedSub = '';
         description = '';
+  // notify global layout to show success toast
+  window.dispatchEvent(new CustomEvent('transactionCreated', { detail: { amount: result.transaction?.amount ?? amount, category: selectedMain } }));
       } else {
         throw new Error(result.error);
       }
     } catch (error) {
       console.error('Submission error:', error);
-      alert(`Failed to submit: ${(error as Error).message}`);
+  window.dispatchEvent(new CustomEvent('transactionFailed', { detail: { message: `Failed to submit: ${(error as Error).message}` } }));
     } finally {
       submitting = false;
     }

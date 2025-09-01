@@ -147,3 +147,117 @@ export async function addSubcategory(categoryName: string, subName: string) {
    3. Legacy alias so old components can still import rawPrefs
 ────────────────────────────────────────────────────────────── */
 export const rawPrefs = categories;
+
+/* ────────────────────────────────────────────────────────────
+   4. QUICK TEMPLATES (client-side favorites like "daily coffee")
+   Stored in localStorage per user client; lightweight helpers to
+   create transactions from a template (POST /budgeting/api/transactions).
+────────────────────────────────────────────────────────────── */
+export interface TemplateEntry {
+  id: string; // simple client-side id
+  name: string; // friendly name (e.g., "Daily coffee")
+  amount: number;
+  category?: string | null;
+  subcategory?: string | null;
+  account_id?: string | null;
+  description?: string | null;
+}
+
+const LS_KEY = 'xpending:quick_templates';
+
+function loadTemplatesFromStorage(): TemplateEntry[] {
+  try {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return [];
+  const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw) as TemplateEntry[];
+  } catch (e) {
+    console.warn('Failed to read templates from localStorage', e);
+    return [];
+  }
+}
+
+function saveTemplatesToStorage(list: TemplateEntry[]) {
+  try {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
+  localStorage.setItem(LS_KEY, JSON.stringify(list));
+  } catch (e) {
+    console.warn('Failed to save templates to localStorage', e);
+  }
+}
+
+import { writable as writableClient } from 'svelte/store';
+
+export const templates = writableClient<TemplateEntry[]>([]);
+
+// Only access localStorage in the browser
+if (typeof window !== 'undefined') {
+  try {
+    templates.set(loadTemplatesFromStorage());
+  } catch (e) {
+    console.warn('Failed to initialize templates from storage', e);
+  }
+
+  // persist changes
+  templates.subscribe(list => saveTemplatesToStorage(list));
+}
+
+// helpers
+export function addTemplate(t: Omit<TemplateEntry, 'id'>) {
+  const id = `${Date.now()}-${Math.random().toString(36).slice(2,9)}`;
+  templates.update(list => [{ id, ...t }, ...list]);
+  return id;
+}
+
+export function removeTemplate(id: string) {
+  templates.update(list => list.filter(x => x.id !== id));
+}
+
+/**
+ * Update an existing template by id with partial changes.
+ * The templates store is persisted to localStorage automatically.
+ */
+export function updateTemplate(id: string, changes: Partial<Omit<TemplateEntry, 'id'>>) {
+  templates.update(list => list.map(t => t.id === id ? { ...t, ...changes } : t));
+}
+
+export interface CreateTransactionPayload {
+  action: 'create' | 'bulk' | string;
+  date?: string | null;
+  amount?: number | null;
+  category?: string | null;
+  subcategory?: string | null;
+  description?: string | null;
+  account_id?: string | null;
+}
+
+export async function createTransactionFromTemplate(t: TemplateEntry) {
+  // Build payload expected by /budgeting/api/transactions
+  // choose a sensible category fallback to avoid DB NOT NULL constraint
+  const currentCats = get(categories);
+  const fallbackCategory = (Array.isArray(currentCats) && currentCats[0] && currentCats[0].name) ? currentCats[0].name : 'Misc';
+
+  const payload: CreateTransactionPayload = {
+    action: 'create',
+    date: new Date().toISOString(),
+    amount: t.amount,
+    category: t.category ?? fallbackCategory,
+    subcategory: t.subcategory ?? null,
+    description: t.description ?? null,
+    account_id: t.account_id ?? null
+  };
+
+  const res = await fetch('/budgeting/api/transactions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(txt || `Failed to create transaction (${res.status})`);
+  }
+
+  const body = await res.json();
+  return body.transaction;
+}

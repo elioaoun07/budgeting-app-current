@@ -21,7 +21,9 @@ Notes   ▸ Responsive design, mobile sidebar, animated welcome, improved input/
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { loadAccounts, loadCategories, currentAccount } from '$lib/budgeting/store';
+  import { loadAccounts, loadCategories, currentAccount, accounts, categories, type TemplateEntry } from '$lib/budgeting/store';
+  import { templates, addTemplate, removeTemplate, createTransactionFromTemplate } from '$lib/budgeting/store';
+  import { updateTemplate } from '$lib/budgeting/store';
   import { quintOut } from 'svelte/easing';
   import { fade, fly } from 'svelte/transition';
   import { supabase } from '$lib/supabaseClient';
@@ -34,6 +36,98 @@ Notes   ▸ Responsive design, mobile sidebar, animated welcome, improved input/
   let isMobile = false;
   let showUserMenu = false; // New state for user menu
   let transactionsExpanded = true; // State for transactions submenu
+
+  // Quick actions state
+  let qaOpen = false;
+  let qaName = '';
+  let qaAmount: number | null = null;
+  let qaDesc = '';
+  // template form fields
+  let qaAccountId: string | null = null;
+  let qaCategory: string | null = null;
+  let qaSubcategory: string | null = null;
+  let qaCategories: any[] = [];
+  let qaSubcategories: string[] = [];
+  // local reactive copy of templates
+  let templatesLocal: any[] = [];
+  const _unsub_templates = templates.subscribe(v => templatesLocal = v);
+
+  // Edit-template modal state
+  let editOpen = false;
+  let editTemplate: TemplateEntry | null = null;
+  let editName = '';
+  let editAmount: number | null = null;
+  let editAccountId: string | null = null;
+  let editCategory: string | null = null;
+  let editSubcategory: string | null = null;
+  let editDescription = '';
+  // lists for edit modal (dependent on account/category)
+  let editCategories: any[] = [];
+  let editSubcategories: string[] = [];
+
+  function openEditTemplate(t) {
+    editTemplate = t;
+    editName = t.name;
+    editAmount = t.amount;
+    editAccountId = t.account_id ?? $currentAccount?.id ?? null;
+    editCategory = t.category ?? null;
+    editSubcategory = t.subcategory ?? null;
+    editDescription = t.description ?? '';
+    editOpen = true;
+  }
+
+  function closeEditTemplate() {
+    editOpen = false;
+    editTemplate = null;
+  }
+
+  function saveEditedTemplate() {
+    if (!editTemplate) return;
+    updateTemplate(editTemplate.id, {
+      name: editName,
+      amount: editAmount ?? undefined,
+      account_id: editAccountId ?? null,
+      category: editCategory ?? null,
+      subcategory: editSubcategory ?? null,
+      description: editDescription ?? null
+    });
+    closeEditTemplate();
+  }
+
+  // reactively update edit modal category list when selected account changes
+  $: if (editAccountId) {
+    if ($currentAccount && editAccountId === $currentAccount.id) {
+      editCategories = $categories ?? [];
+    } else {
+      (async () => {
+        try {
+          const res = await fetch(`/budgeting/api/user/categories?accountId=${encodeURIComponent(editAccountId)}`);
+          if (res.ok) {
+            const remote = await res.json();
+            editCategories = Array.isArray(remote) ? remote : [];
+          } else {
+            editCategories = [];
+          }
+        } catch (err) {
+          console.warn('Failed to load edit categories for account', editAccountId, err);
+          editCategories = [];
+        }
+      })();
+    }
+    if (!editCategories.find(c => c.name === editCategory)) editCategory = null;
+  } else {
+    editCategories = $categories ?? [];
+    if (!editCategories.find(c => c.name === editCategory)) editCategory = null;
+  }
+
+  // edit modal subcategories derive from selected category
+  $: if (editCategory) {
+    const found = editCategories.find(c => c.name === editCategory);
+    editSubcategories = found && Array.isArray(found.subs) ? found.subs : [];
+    if (!editSubcategories.includes(editSubcategory || '')) editSubcategory = null;
+  } else {
+    editSubcategories = [];
+  }
 
   // Initialize floating particles
   onMount(() => {
@@ -66,6 +160,49 @@ Notes   ▸ Responsive design, mobile sidebar, animated welcome, improved input/
       showWelcome = false;
     }, 2000);
   });
+
+  // initialize default QA account on mount
+  onMount(() => {
+    qaAccountId = $currentAccount?.id ?? null;
+  });
+
+  // reactively update QA category list when selected account changes
+  $: if (qaAccountId) {
+    // if the QA account matches the global current account, reuse loaded categories
+    if ($currentAccount && qaAccountId === $currentAccount.id) {
+      qaCategories = $categories ?? [];
+    } else {
+      // fetch categories for that account from the user categories endpoint
+      (async () => {
+        try {
+          const res = await fetch(`/budgeting/api/user/categories?accountId=${encodeURIComponent(qaAccountId)}`);
+          if (res.ok) {
+            const remote = await res.json();
+            qaCategories = Array.isArray(remote) ? remote : [];
+          } else {
+            qaCategories = [];
+          }
+        } catch (err) {
+          console.warn('Failed to load QA categories for account', qaAccountId, err);
+          qaCategories = [];
+        }
+      })();
+    }
+    // reset dependent fields if no longer valid
+    if (!qaCategories.find(c => c.name === qaCategory)) qaCategory = null;
+  } else {
+    qaCategories = $categories ?? [];
+    if (!qaCategories.find(c => c.name === qaCategory)) qaCategory = null;
+  }
+
+  // subcategories derive from selected category
+  $: if (qaCategory) {
+    const found = qaCategories.find(c => c.name === qaCategory);
+    qaSubcategories = found && Array.isArray(found.subs) ? found.subs : [];
+    if (!qaSubcategories.includes(qaSubcategory || '')) qaSubcategory = null;
+  } else {
+    qaSubcategories = [];
+  }
 
   function createParticles() {
     particles = Array.from({ length: 20 }, (_, i) => ({
@@ -156,6 +293,116 @@ Notes   ▸ Responsive design, mobile sidebar, animated welcome, improved input/
       window.location.href = '/help';
     }
   }
+
+  // Quick actions helpers
+  async function saveQuickAsTemplate() {
+    if (!qaName || qaAmount === null || Number.isNaN(qaAmount)) return;
+    const accId = qaAccountId ?? $currentAccount?.id ?? null;
+    addTemplate({
+      name: qaName,
+      amount: qaAmount,
+      account_id: accId,
+      description: qaDesc,
+      category: qaCategory ?? null,
+      subcategory: qaSubcategory ?? null
+    });
+    qaName = '';
+    qaAmount = null;
+    qaDesc = '';
+    qaAccountId = $currentAccount?.id ?? null;
+    qaCategory = null;
+    qaSubcategory = null;
+    qaOpen = false;
+  }
+
+  async function useTemplate(t) {
+  // open a confirmation dialog so user can adjust amount/description before committing
+  confirmTemplate = t;
+  confirmAmount = t.amount;
+  confirmDescription = t.description ?? '';
+  confirmOpen = true;
+  }
+
+  // --- Toast / mobile success messages ---
+  type Toast = { id: number; message: string; type?: 'success' | 'error' };
+  let toasts: Toast[] = [];
+
+  // Confirm-before-send modal state
+  let confirmOpen = false;
+  let confirmTemplate: TemplateEntry | null = null;
+  let confirmAmount: number | null = null;
+  let confirmDescription: string = '';
+
+  async function confirmSend() {
+    if (!confirmTemplate) return;
+    try {
+      const payload = { ...confirmTemplate, amount: confirmAmount, description: confirmDescription } as any;
+      // createTransactionFromTemplate expects a TemplateEntry but will POST to transactions; forward edited fields
+      const created = await createTransactionFromTemplate(payload as any);
+      window.dispatchEvent(new CustomEvent('transactionCreated', { detail: { amount: confirmAmount, category: confirmTemplate.category } }));
+    } catch (err) {
+      console.error('Failed to create transaction from confirmed template', err);
+      window.dispatchEvent(new CustomEvent('transactionFailed', { detail: { message: String(err?.message ?? err) } }));
+    } finally {
+      confirmOpen = false;
+      confirmTemplate = null;
+      confirmAmount = null;
+      confirmDescription = '';
+    }
+  }
+
+  function cancelConfirm() {
+    confirmOpen = false;
+    confirmTemplate = null;
+    confirmAmount = null;
+    confirmDescription = '';
+  }
+
+  function showToast(message: string, type: 'success' | 'error' = 'success') {
+    const id = Date.now() + Math.floor(Math.random() * 1000);
+    toasts = [{ id, message, type }, ...toasts];
+    // auto-dismiss
+    setTimeout(() => {
+      toasts = toasts.filter(t => t.id !== id);
+    }, 3200);
+  }
+
+  function removeToast(id: number) {
+    toasts = toasts.filter(t => t.id !== id);
+  }
+
+  // Listen for global transactionCreated events and show a mobile-friendly toast
+  onMount(() => {
+    const handler = (e: any) => {
+      const d = e?.detail ?? {};
+      const amt = d.amount ?? d?.amount === 0 ? d.amount : null;
+      const prettyAmt = amt !== null && amt !== undefined ? `$${Number(amt).toFixed(2)}` : '';
+      const category = d.category ?? d?.categoryName ?? '';
+      const message = d.message ?? `Logged ${prettyAmt} ${category ? `to ${category}` : 'transaction'}`.trim();
+      showToast(message, 'success');
+    };
+
+    window.addEventListener('transactionCreated', handler as EventListener);
+
+    const failedHandler = (e: any) => {
+      const msg = e?.detail?.message ?? 'Failed to log transaction';
+      showToast(msg, 'error');
+    };
+
+    window.addEventListener('transactionFailed', failedHandler as EventListener);
+
+    return () => {
+      window.removeEventListener('transactionCreated', handler as EventListener);
+      window.removeEventListener('transactionFailed', failedHandler as EventListener);
+    };
+  });
+
+  // cleanup subscriptions
+  onMount(() => {
+    return () => {
+      try { _unsub_templates(); } catch (e) {}
+    };
+  });
 </script>
 
 <!-- Floating particles background -->
@@ -359,7 +606,204 @@ Notes   ▸ Responsive design, mobile sidebar, animated welcome, improved input/
   <main class="main-content">
     <slot />
   </main>
+
+  <!-- Quick Actions floating button -->
+  <div class="quick-actions">
+    <button class="qa-fab" aria-label="Quick actions" on:click={() => qaOpen = !qaOpen}>
+      <!-- simple lightning / star icon -->
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2L15 9H22L16.5 13L19 20L12 16L5 20L7.5 13L2 9H9L12 2Z" stroke="white" stroke-width="0.8" fill="currentColor"/>
+      </svg>
+    </button>
+
+    {#if qaOpen}
+      <div class="qa-panel" out:fly={{ y: 6, duration: 120 }}>
+        <h4>Quick Templates</h4>
+        
+        <!-- Template List -->
+        <div class="qa-list">
+          {#if templatesLocal.length === 0}
+            <div class="qa-empty">No templates yet — add one below</div>
+          {:else}
+            {#each templatesLocal as t (t.id)}
+              <div class="qa-item">
+                <div class="qa-info">
+                  <div class="qa-name">{t.name}</div>
+                  <div class="qa-meta">${t.amount.toFixed(2)} · {t.description}</div>
+                </div>
+                <div class="qa-actions">
+                  <button class="qa-use" on:click={() => useTemplate(t)} title="Log this transaction">Use</button>
+                  <button class="qa-edit" on:click={() => openEditTemplate(t)} title="Edit template">✎</button>
+                  <button class="qa-del" on:click={() => removeTemplate(t.id)} title="Remove template">×</button>
+                </div>
+              </div>
+            {/each}
+          {/if}
+        </div>
+
+        <!-- Add New Template Form -->
+        <form on:submit|preventDefault={saveQuickAsTemplate}>
+          <div class="input-group">
+            <label for="qaName">Name</label>
+            <input 
+              type="text" 
+              id="qaName" 
+              placeholder="e.g. Daily coffee" 
+              bind:value={qaName} 
+              required 
+            />
+          </div>
+
+          <div class="input-group">
+            <label for="qaAccount">Account</label>
+            <select 
+              id="qaAccount" 
+              bind:value={qaAccountId}
+              required
+            >
+              <option value="">Select account</option>
+              {#each $accounts as acc}
+                <option value={acc.id}>{acc.name}</option>
+              {/each}
+            </select>
+          </div>
+
+          <div class="input-group">
+            <label for="qaCategory">Category</label>
+            <select 
+              id="qaCategory" 
+              bind:value={qaCategory}
+              required
+            >
+              <option value="">Select category</option>
+              {#each $categories as cat}
+                <option value={cat.name}>{cat.name}</option>
+              {/each}
+            </select>
+          </div>
+
+          <div class="input-group">
+            <label for="qaSubcategory">Subcategory</label>
+            <select 
+              id="qaSubcategory" 
+              bind:value={qaSubcategory}
+              disabled={!qaCategories || qaCategories.length === 0}
+            >
+              <option value="">Select subcategory</option>
+              {#each qaSubcategories as s}
+                <option value={s}>{s}</option>
+              {/each}
+            </select>
+          </div>
+
+          <div class="input-group">
+            <label for="qaAmount">Amount</label>
+            <input 
+              type="number" 
+              id="qaAmount" 
+              placeholder="Amount" 
+              bind:value={qaAmount} 
+              required 
+            />
+          </div>
+
+          <div class="input-group">
+            <label for="qaDesc">Description (optional)</label>
+            <textarea 
+              id="qaDesc" 
+              placeholder="Description (optional)" 
+              bind:value={qaDesc} 
+            ></textarea>
+          </div>
+
+          <div class="qa-form-actions">
+            <button type="submit" disabled={!qaName || qaAmount === null}>Save template</button>
+            <button type="button" on:click={() => qaOpen = false}>Cancel</button>
+          </div>
+        </form>
+      </div>
+    {/if}
+  </div>
 </div>
+
+<!-- Confirm modal -->
+{#if confirmOpen && confirmTemplate}
+  <div class="confirm-backdrop">
+    <div class="confirm-modal" role="dialog" aria-modal="true">
+      <h3>Confirm transaction</h3>
+      <p class="confirm-meta">{confirmTemplate.name} · {confirmTemplate.category}{confirmTemplate.subcategory ? ` / ${confirmTemplate.subcategory}` : ''}</p>
+      <label>Amount</label>
+      <input type="number" bind:value={confirmAmount} />
+      <label>Description</label>
+      <input bind:value={confirmDescription} />
+      <div class="qa-form-actions">
+        <button type="submit" on:click={confirmSend}>Confirm</button>
+        <button type="button" class="btn-secondary" on:click={cancelConfirm}>Cancel</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Edit template modal -->
+{#if editOpen && editTemplate}
+  <div class="confirm-backdrop">
+    <div class="confirm-modal" role="dialog" aria-modal="true">
+      <h3>Edit template</h3>
+
+      <form on:submit|preventDefault={saveEditedTemplate}>
+        <div class="input-group">
+          <label for="editName">Name</label>
+          <input id="editName" type="text" bind:value={editName} required />
+        </div>
+
+        <div class="input-group">
+          <label for="editAccount">Account</label>
+          <select id="editAccount" bind:value={editAccountId} required>
+            <option value="">Select account</option>
+            {#each $accounts as a}
+              <option value={a.id}>{a.name}</option>
+            {/each}
+          </select>
+        </div>
+
+        <div class="input-group">
+          <label for="editCategory">Category</label>
+          <select id="editCategory" bind:value={editCategory} required>
+            <option value="">Select category</option>
+            {#each editCategories as c}
+              <option value={c.name}>{c.name}</option>
+            {/each}
+          </select>
+        </div>
+
+        <div class="input-group">
+          <label for="editSubcategory">Subcategory</label>
+          <select id="editSubcategory" bind:value={editSubcategory} disabled={!editCategories || editCategories.length === 0}>
+            <option value="">Select subcategory</option>
+            {#each editSubcategories as s}
+              <option value={s}>{s}</option>
+            {/each}
+          </select>
+        </div>
+
+        <div class="input-group">
+          <label for="editAmount">Amount</label>
+          <input id="editAmount" type="number" bind:value={editAmount} />
+        </div>
+
+        <div class="input-group">
+          <label for="editDesc">Description</label>
+          <textarea id="editDesc" bind:value={editDescription}></textarea>
+        </div>
+
+        <div class="qa-form-actions">
+          <button type="submit">Save</button>
+          <button type="button" class="btn-secondary" on:click={closeEditTemplate}>Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+{/if}
 
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
@@ -924,4 +1368,275 @@ Notes   ▸ Responsive design, mobile sidebar, animated welcome, improved input/
       font-size: 2rem;
     }
   }
+
+/* Updated styles for Quick Actions */
+.quick-actions {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 1100;
+}
+
+.qa-fab {
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+  color: white;
+  border: none;
+  box-shadow: 0 10px 30px rgba(30,58,138,0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.qa-fab:hover {
+  transform: scale(1.05);
+  box-shadow: 0 15px 35px rgba(30,58,138,0.4);
+}
+
+.qa-panel {
+  margin-bottom: 10px;
+  width: 300px;
+  background: rgba(15,23,42,0.95);
+  border: 1px solid rgba(30,58,138,0.3);
+  padding: 0.75rem;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+  margin-bottom: 12px;
+}
+
+.qa-list {
+  max-height: 220px;
+  overflow: auto;
+  margin-bottom: 0.5rem;
+}
+
+.qa-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid rgba(71,85,105,0.06);
+}
+
+.qa-info {
+  overflow: hidden;
+}
+
+.qa-name {
+  font-weight: 500;
+  color: #e2e8f0;
+  margin-bottom: 0.25rem;
+}
+
+.qa-meta {
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.qa-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.qa-use, .qa-edit, .qa-del {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.qa-use {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.qa-use:hover {
+  background: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+  transform: translateY(-1px);
+}
+
+.qa-edit {
+  background: rgba(110, 110, 110, 0.1);
+  color: #6e6e6e;
+  border: 1px solid rgba(110, 110, 110, 0.3);
+}
+
+.qa-edit:hover {
+  background: rgba(110, 110, 110, 0.2);
+  color: #6e6e6e;
+  transform: translateY(-1px);
+}
+
+.qa-del {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.qa-del:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  transform: translateY(-1px);
+}
+
+.input-group {
+  margin-bottom: 1rem;
+}
+
+.input-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #cbd5e1;
+}
+
+.input-group input[type="text"],
+.input-group input[type="number"],
+.input-group select,
+.input-group textarea {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(71, 85, 105, 0.4);
+  border-radius: 8px;
+  font-size: 1rem;
+  color: #e2e8f0;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+  font-family: 'Inter', sans-serif;
+}
+
+.input-group input[type="text"]:focus,
+.input-group input[type="number"]:focus,
+.input-group select:focus,
+.input-group textarea:focus {
+  outline: none;
+  border-color: rgba(59, 130, 246, 0.8);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+  background: rgba(30, 41, 59, 0.9);
+}
+
+.input-group textarea {
+  min-height: 60px;
+  resize: vertical;
+}
+
+.qa-form-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.qa-form-actions button {
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.qa-form-actions button[type="submit"] {
+  background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+  color: white;
+}
+
+.qa-form-actions button[type="submit"]:hover {
+  background: linear-gradient(135deg, #2c5282, #4299e1);
+  transform: translateY(-1px);
+}
+
+.qa-form-actions button[type="button"] {
+  background: rgba(30, 41, 59, 0.7);
+  color: #cbd5e1;
+  border: 1px solid rgba(71, 85, 105, 0.4);
+}
+
+.qa-form-actions button[type="button"]:hover {
+  background: rgba(30, 41, 59, 0.9);
+  color: #e2e8f0;
+  transform: translateY(-1px);
+}
+/* Toast notifications (mobile-friendly) */
+.toasts-container {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  z-index: 1200;
+  pointer-events: none; /* let clicks pass through except for buttons */
+}
+.toast {
+  pointer-events: auto;
+  min-width: 200px;
+  max-width: 92%;
+  background: rgba(15,23,42,0.95);
+  color: #e6fffa;
+  border-radius: 12px;
+  padding: 10px 14px;
+  box-shadow: 0 8px 24px rgba(2,6,23,0.6);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(59,130,246,0.12);
+  font-weight: 600;
+}
+.toast.success { background: linear-gradient(90deg, rgba(16,185,129,0.06), rgba(59,130,246,0.04)); color: #bbf7d0; border-color: rgba(16,185,129,0.18); }
+.toast.error { background: linear-gradient(90deg, rgba(239,68,68,0.06), rgba(30,41,59,0.04)); color: #fecaca; border-color: rgba(239,68,68,0.12); }
+.toast .close-btn {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+/* Confirm modal */
+.confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1300;
+}
+.confirm-modal {
+  width: 92%;
+  max-width: 420px;
+  background: rgba(15,23,42,0.98);
+  border: 1px solid rgba(59,130,246,0.08);
+  padding: 1rem;
+  border-radius: 12px;
+}
+.confirm-modal h3 { margin: 0 0 8px 0; }
+.confirm-meta { color: #94a3b8; font-size: 0.9rem; margin-bottom: 8px; }
+.confirm-modal input { width: 100%; padding: 0.6rem; margin-bottom: 8px; background: rgba(30,41,59,0.7); border:1px solid rgba(71,85,105,0.4); border-radius:6px; color: #e2e8f0; }
+.confirm-actions { display:flex; gap:8px; }
+.confirm-actions .btn-secondary { background: transparent; border: 1px solid rgba(71,85,105,0.4); }
 </style>
+
+<!-- Toast markup -->
+{#if toasts && toasts.length}
+  <div class="toasts-container">
+    {#each toasts as t (t.id)}
+      <div class="toast {t.type}">
+        <div class="toast-body">{t.message}</div>
+        <button class="close-btn" on:click={() => removeToast(t.id)} aria-label="Dismiss">×</button>
+      </div>
+    {/each}
+  </div>
+{/if}
