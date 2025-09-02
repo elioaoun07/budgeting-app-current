@@ -24,14 +24,19 @@ Notes   ▸ Animated background, typing quotes, error/success feedback, responsi
   import { onMount } from 'svelte';
   import { fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
+  import { isCredentialAPISupported, registerDeviceCredential, getStoredDeviceCredential } from '$lib/biometric';
   
   let email = '';
   let password = '';
   let error = '';
   let isSubmitting = false;
-  let card;
-  let inputs = [];
-  let particles = [];
+  let biometricSupported = false;
+  let registeringDevice = false;
+  let biometricSigningIn = false;
+  let biometricMessage = '';
+    let card: HTMLDivElement | null = null;
+    let inputs: HTMLInputElement[] = [];
+    let particles: Array<{ id: number; x: number; y: number; size: number; duration: number; delay: number }> = [];
   let showParticles = false;
   let currentQuoteIndex = 0;
   let displayedText = '';
@@ -52,6 +57,8 @@ Notes   ▸ Animated background, typing quotes, error/success feedback, responsi
     
     // Start typing animation
     typeText();
+  // detect credential API support
+  biometricSupported = isCredentialAPISupported();
   });
 
   function createParticles() {
@@ -114,18 +121,58 @@ Notes   ▸ Animated background, typing quotes, error/success feedback, responsi
       invalidateAll().catch(() => {});
 
       // Shorter success animation so redirect feels snappier
-      card.classList.add('success-glow');
+  card?.classList.add('success-glow');
       setTimeout(() => {
         window.location.href = '/budgeting';
       }, 200);
     } else {
       error = 'Invalid credentials';
       // Error animation
-      card.classList.add('shake');
-      setTimeout(() => card.classList.remove('shake'), 600);
+  card?.classList.add('shake');
+  setTimeout(() => card?.classList.remove('shake'), 600);
     }
 
     isSubmitting = false;
+  }
+
+  async function registerDevice() {
+    registeringDevice = true;
+    biometricMessage = '';
+    // require current email and password before registering
+    if (!email || !password) {
+      biometricMessage = 'Enter your email and password first to register this device.';
+      registeringDevice = false;
+      return;
+    }
+
+    const ok = await registerDeviceCredential(email, password);
+    if (ok) {
+      biometricMessage = 'Device registered. You can now sign in with biometrics on this device.';
+    } else {
+      biometricMessage = 'Failed to register device credentials. Your browser may not support it.';
+    }
+    registeringDevice = false;
+  }
+
+  async function biometricSignIn() {
+    biometricMessage = '';
+    biometricSigningIn = true;
+    try {
+      const cred = await getStoredDeviceCredential();
+      if (!cred || !cred.id) {
+        biometricMessage = 'No stored credential found or access denied.';
+        return;
+      }
+
+      // autofill and submit
+      email = cred.id;
+      password = cred.password;
+      await submit();
+    } catch (e) {
+      biometricMessage = String(e ?? 'Unknown error');
+    } finally {
+      biometricSigningIn = false;
+    }
   }
 </script>
 
@@ -218,6 +265,20 @@ Notes   ▸ Animated background, typing quotes, error/success feedback, responsi
       <a href="/forgot-password" class="footer-link">Recover Credentials</a>
       <div class="divider"></div>
       <a href="/signup" class="footer-link">New Account</a>
+      {#if biometricSupported}
+        <div class="biometric-area">
+          <button type="button" class="small" on:click={registerDevice} disabled={registeringDevice}>
+            {registeringDevice ? 'Registering…' : 'Register device (biometric)'}
+          </button>
+          <button type="button" class="small" on:click={biometricSignIn} disabled={biometricSigningIn}>
+            {biometricSigningIn ? 'Signing in…' : 'Sign in with biometrics'}
+          </button>
+          <div class="biometric-hint small muted">On desktop this opens the browser password chooser; platform biometrics vary by OS/browser.</div>
+          {#if biometricMessage}
+            <div class="biometric-msg">{biometricMessage}</div>
+          {/if}
+        </div>
+      {/if}
     </div>
   </div>
   
