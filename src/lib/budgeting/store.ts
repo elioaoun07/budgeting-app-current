@@ -44,15 +44,53 @@ export interface Account {
 export const accounts       = writable<Account[]>([]);
 export const currentAccount = writable<Account | null>(null);
 
+// Default account persistence (client-only preference)
+const DEFAULT_ACCOUNT_KEY = 'budgeting:default_account_id';
+
+export function setDefaultAccount(id: string | null) {
+  if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+    if (id) localStorage.setItem(DEFAULT_ACCOUNT_KEY, id);
+    else localStorage.removeItem(DEFAULT_ACCOUNT_KEY);
+  }
+}
+
+export function getDefaultAccountId(): string | null {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return null;
+  return localStorage.getItem(DEFAULT_ACCOUNT_KEY);
+}
+
+/** Update an account name on the server and in the local store */
+export async function updateAccountName(id: string, name: string) {
+  const res = await fetch('/budgeting/api/accounts', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, name })
+  });
+  if (!res.ok) {
+    throw new Error(await res.text());
+  }
+  const updated = await res.json();
+  // update local stores
+  accounts.update(list => (list || []).map(a => (a.id === id ? updated : a)));
+  // if the updated account is the current one, refresh it
+  if (get(currentAccount)?.id === id) currentAccount.set(updated);
+}
+
 /* Load the user’s accounts once on app start */
 export async function loadAccounts() {
   const res = await fetch('/budgeting/api/accounts');
   if (!res.ok) throw new Error(await res.text());
   const data: Account[] = await res.json();
+  // Keep fetched order, but prefer the saved default (if any) for selection.
   accounts.set(data);
-
   if (!get(currentAccount) && data.length) {
-    currentAccount.set(data[0]);       // auto-select first account
+    const def = getDefaultAccountId();
+    if (def) {
+      const found = data.find(a => a.id === def);
+      currentAccount.set(found ?? data[0]);
+    } else {
+      currentAccount.set(data[0]);
+    }
   }
 }
 

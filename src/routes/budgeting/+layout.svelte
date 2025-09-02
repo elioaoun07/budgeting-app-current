@@ -140,11 +140,17 @@ Notes   ▸ Responsive design, mobile sidebar, animated welcome, improved input/
       try {
         // Lazily import the store to avoid circular import in some setups
         import('$lib/budgeting/store').then(mod => {
+          // Keep server-provided order but prefer the user's saved default account
+          // for the initial selection (do not mutate the accounts array order).
           mod.accounts.set(data.accounts);
-          // Set a sensible default current account from server data.
-          // Overwriting here is acceptable during initial hydration.
           if (data.accounts.length) {
-            try { mod.currentAccount.set(data.accounts[0]); } catch {}
+            try {
+              const def = typeof mod.getDefaultAccountId === 'function' ? mod.getDefaultAccountId() : null;
+              const found = def ? data.accounts.find(a => a.id === def) : null;
+              mod.currentAccount.set(found ?? data.accounts[0]);
+            } catch (e) {
+              try { mod.currentAccount.set(data.accounts[0]); } catch {}
+            }
           }
         }).catch(() => {
           // Fallback to client-side load if hydrate fails

@@ -27,7 +27,7 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import { get } from 'svelte/store';
-  import { categories as categoriesStore, saveCategories, accounts, currentAccount, selectAccount } from '$lib/budgeting/store';
+  import { categories as categoriesStore, saveCategories, accounts, currentAccount, selectAccount, updateAccountName, setDefaultAccount, getDefaultAccountId } from '$lib/budgeting/store';
   import Icon from '$lib/icons/Icon.svelte';
   import type { Category } from '$lib/budgeting/defaults';
 
@@ -44,7 +44,7 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
       ...c, 
       id: `category-${c.name}-${index}`, // Unique stable ID
       originalIndex: index,
-      subItems: (c.subs || []).map((s, idx) => ({ id: `sub-${c.id}-${idx}-${s}`, name: s }))
+      subItems: (c.subs || []).map((s, idx) => ({ id: `sub-${(c as any).id}-${idx}-${s}`, name: s }))
     }))
   );
 
@@ -57,7 +57,7 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
       ...c,
       id: `category-${c.name}-${index}`,
       originalIndex: index,
-      subItems: (c.subs || []).map((s, idx) => ({ id: `sub-${c.id}-${idx}-${s}`, name: s }))
+      subItems: (c.subs || []).map((s, idx) => ({ id: `sub-${(c as any).id}-${idx}-${s}`, name: s }))
     }));
     // reset open state when changing account
     expandedCategories = new Set();
@@ -76,6 +76,60 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
   $effect(() => {
     selectedAccountId = $currentAccount ? $currentAccount.id : '';
   });
+
+  // Account rename state + helpers
+  let editingAccount = $state(false);
+  let editingAccountName = $state('');
+  let defaultAccountId = $state('');
+  let accountMessage = $state('');
+  let savingAccount = $state(false);
+
+  // initialize defaultAccountId from localStorage when modal mounts (client-only)
+  if (typeof window !== 'undefined') {
+    const def = getDefaultAccountId();
+    defaultAccountId = def || '';
+  }
+
+  function startEditingAccount() {
+    // Prefill the input with the currently selected account name
+    const acct = ($accounts || []).find((a: any) => a.id === selectedAccountId) || $currentAccount;
+    editingAccountName = acct ? acct.name : '';
+    editingAccount = true;
+    // keep the select bound value in sync
+    selectedAccountId = selectedAccountId || ($currentAccount ? $currentAccount.id : '');
+  }
+
+  function cancelAccountEdit() {
+    editingAccount = false;
+    editingAccountName = '';
+  }
+
+  async function saveAccountName() {
+    const newName = (editingAccountName || '').trim();
+    if (!newName || !selectedAccountId) {
+      // nothing to save
+      cancelAccountEdit();
+      return;
+    }
+
+    // Persist change to server + update local stores
+    savingAccount = true;
+    try {
+      await updateAccountName(selectedAccountId, newName);
+      accountMessage = 'Saved';
+    } catch (err) {
+      console.error('Failed to update account name', err);
+      accountMessage = 'Save failed — changes applied locally';
+      // fallback: update local store so UI doesn't break
+      accounts.update((list: any[]) => (list || []).map((a) => (a.id === selectedAccountId ? { ...a, name: newName } : a)));
+      selectAccount(selectedAccountId);
+    } finally {
+      savingAccount = false;
+    }
+
+    editingAccount = false;
+    editingAccountName = '';
+  }
 
   // When user changes the select, call selectAccount only if different
   $effect(() => {
@@ -203,7 +257,7 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
     items = newItems;
     
     if (info.source === SOURCES.KEYBOARD || info.source === SOURCES.POINTER) {
-      isDragActive = info.trigger === TRIGGERS.DRAG_START;
+      isDragActive = info.trigger === (TRIGGERS as any).DRAG_STARTED;
     }
   }
 
@@ -305,14 +359,53 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
       <div class="account-selector">
         <label class="small muted">Account</label>
           <div class="account-row">
-          <select
-            aria-label="Select account"
-            bind:value={selectedAccountId}
-          >
-            {#each $accounts as a}
-              <option value={a.id} selected={($currentAccount && a.id === $currentAccount.id)}>{a.name}</option>
-            {/each}
-          </select>
+          {#if !editingAccount}
+            <select
+              aria-label="Select account"
+              bind:value={selectedAccountId}
+            >
+              {#each $accounts as a}
+                <option value={a.id} selected={($currentAccount && a.id === $currentAccount.id)}>{a.name}</option>
+              {/each}
+            </select>
+
+            <div class="account-actions">
+              <button type="button" class="icon-btn" title="Rename account" aria-label="Rename account" onclick={startEditingAccount}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+
+              <button type="button" class="icon-btn" title="Set default account" aria-label="Set default account" onclick={() => {
+                if (defaultAccountId === selectedAccountId) {
+                  defaultAccountId = '';
+                  setDefaultAccount(null);
+                } else {
+                  defaultAccountId = selectedAccountId;
+                  setDefaultAccount(selectedAccountId);
+                }
+              }}>
+                {#if defaultAccountId === selectedAccountId}
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                {:else}
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.35"/></svg>
+                {/if}
+              </button>
+            </div>
+          {:else}
+            <div class="account-edit-inline">
+              <input
+                class="account-rename-input"
+                bind:value={editingAccountName}
+                aria-label="Account name"
+                placeholder="New account name"
+              />
+              <button type="button" class="icon-btn" title="Save" aria-label="Save account name" onclick={saveAccountName}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <button type="button" class="icon-btn" title="Cancel" aria-label="Cancel account rename" onclick={cancelAccountEdit}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </div>
+          {/if}
         </div>
       </div>
       <p class="instructions">
@@ -356,7 +449,7 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
                   <input
                     class="category-name-input"
                     value={editingNameValue}
-                    oninput={(e) => editingNameValue = e.target.value}
+                    oninput={(e) => editingNameValue = (e.target as HTMLInputElement).value}
                     onblur={() => saveName(i)}
                     onkeydown={(e) => handleNameKeydown(e, i)}
                     autofocus
@@ -387,7 +480,7 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
                       value={i + 1}
                       min="1"
                       max={items.length}
-                      onblur={(e) => handleIndexChange(i, e.target.value)}
+                      onblur={(e) => handleIndexChange(i, (e.target as HTMLInputElement).value)}
                       onkeydown={(e) => handleIndexKeydown(e, i)}
                       aria-label={`Position for ${cat.name}`}
                       autofocus
@@ -628,6 +721,13 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
   .account-selector { margin-bottom: 0.75rem; display: flex; flex-direction: column; gap: 0.35rem; }
   .account-row { display:flex; align-items:center; gap:0.6rem; }
   .account-selector select { background: rgba(10,14,20,0.75); color: #e2e8f0; border: 1px solid rgba(59,130,246,0.12); padding: 0.4rem 0.6rem; border-radius: 8px; font-weight:600; }
+
+  /* Compact rename UI */
+  .account-actions { display:flex; align-items:center; gap:0.4rem; }
+  .icon-btn { background: transparent; border: 1px solid rgba(71,85,105,0.08); color: #94a3b8; padding: 0.28rem; border-radius: 8px; width: 34px; height: 34px; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .icon-btn:hover { background: rgba(59,130,246,0.06); color: #e2e8f0; }
+  .account-rename-row.compact { display:flex; align-items:center; gap:0.4rem; }
+  .account-rename-input { background: rgba(10,14,20,0.75); color: #e2e8f0; border: 1px solid rgba(59,130,246,0.12); padding: 0.28rem 0.5rem; border-radius: 8px; min-width: 180px; }
 
   .drag-active-hint {
     color: #3b82f6;

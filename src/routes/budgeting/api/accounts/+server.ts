@@ -23,7 +23,7 @@ import { json }                from '@sveltejs/kit';
 import { supabase }            from '$lib/supabaseClient';
 
 export const GET: RequestHandler = async ({ locals }) => {
-  const user = locals.user;
+  const user = (locals as any).user;
   if (!user) {
     // no user → empty list
     return json([], { status: 200 });
@@ -43,7 +43,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 };
 
 export const POST: RequestHandler = async ({ request, locals }) => {
-  const user = locals.user;
+  const user = (locals as any).user;
   if (!user) return json({ error: 'Unauthorized' }, { status: 401 });
 
   const { name, type } = await request.json();
@@ -60,4 +60,30 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   }
 
   return json(data, { status: 201 });
+};
+
+export const PATCH: RequestHandler = async ({ request, locals }) => {
+  const user = (locals as any).user;
+  if (!user) return json({ error: 'Unauthorized' }, { status: 401 });
+
+  const body = await request.json();
+  const { id, name } = body || {};
+  if (!id || typeof name !== 'string') {
+    return json({ error: 'Missing id or name' }, { status: 400 });
+  }
+
+  const { data, error } = await supabase
+    .from('accounts')
+    .update({ name })
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .select('id,name,type')
+    .single();
+
+  if (error) {
+    console.error('Could not update account:', error);
+    return json({ error: error.message }, { status: 400 });
+  }
+
+  return json(data, { status: 200 });
 };
