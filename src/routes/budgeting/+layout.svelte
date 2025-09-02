@@ -131,8 +131,10 @@ Notes   ▸ Responsive design, mobile sidebar, animated welcome, improved input/
 
   // Initialize floating particles
   onMount(() => {
-    isMobile = window.innerWidth < 768;
+  isMobile = window.innerWidth < 768;
     createParticles();
+  // Show the sidebar by default on desktop, keep it closed on small screens.
+  navOpen = !isMobile;
     // If server provided accounts, hydrate client store to avoid extra fetch.
     if (data?.accounts && data.accounts.length) {
       try {
@@ -222,6 +224,18 @@ Notes   ▸ Responsive design, mobile sidebar, animated welcome, improved input/
 
   function toggleNav() {
     navOpen = !navOpen;
+  }
+
+  // Unified menu click handler: ensure clicking the hamburger will close the
+  // sidebar when it's open (and open when closed). This avoids any edge-case
+  // where a toggle might be missed by other UI state.
+  function handleMenuClick(event) {
+    // keep normal behavior but be explicit about closing
+    if (navOpen) {
+      navOpen = false;
+    } else {
+      navOpen = true;
+    }
   }
 
   // Toggle user menu visibility
@@ -441,7 +455,7 @@ Notes   ▸ Responsive design, mobile sidebar, animated welcome, improved input/
   <!-- Top navigation bar -->
   <header class="top-bar">
     <div class="nav-left">
-      <button class="menu-button" on:click={toggleNav} aria-label="Toggle menu">
+  <button class="menu-button" on:click={handleMenuClick} aria-label="Toggle menu">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
           <path d="M3 12H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
           <path d="M3 6H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -1074,6 +1088,7 @@ Notes   ▸ Responsive design, mobile sidebar, animated welcome, improved input/
     flex-direction: column;
     transition: transform 0.3s ease;
     z-index: 90;
+  transform: translateX(0);
   }
 
   .side-nav.mobile {
@@ -1082,6 +1097,12 @@ Notes   ▸ Responsive design, mobile sidebar, animated welcome, improved input/
 
   .side-nav.mobile.open {
     transform: translateX(0);
+  }
+
+  /* For non-mobile screens allow explicit closing via `.open` class.
+     When `.open` is not present, hide the sidebar (so the hamburger can close it). */
+  .side-nav:not(.open) {
+    transform: translateX(-100%);
   }
 
   .nav-header {

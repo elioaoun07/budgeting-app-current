@@ -22,10 +22,12 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
           Uses svelte-dnd-action for smooth drag and drop.
 ──────────────────────────────────────────────────────────────
 -->
+<!-- Enhanced Category Management Modal -->
+<!-- Enhanced Category Management Modal -->
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import { get } from 'svelte/store';
-  import { categories as categoriesStore, saveCategories } from '$lib/budgeting/store';
+  import { categories as categoriesStore, saveCategories, accounts, currentAccount, selectAccount } from '$lib/budgeting/store';
   import Icon from '$lib/icons/Icon.svelte';
   import type { Category } from '$lib/budgeting/defaults';
 
@@ -46,13 +48,42 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
     }))
   );
 
+  // Keep the modal in sync with the global selected account/categories.
+  // Use $effect (runes mode) instead of $: reactive statements.
+  $effect(() => {
+    if (!$currentAccount) return;
+    const cats = $categoriesStore || [];
+    items = cats.map((c, index) => ({
+      ...c,
+      id: `category-${c.name}-${index}`,
+      originalIndex: index,
+      subItems: (c.subs || []).map((s, idx) => ({ id: `sub-${c.id}-${idx}-${s}`, name: s }))
+    }));
+    // reset open state when changing account
+    expandedCategories = new Set();
+  });
+
   let isDragActive = $state(false);
   let editingIndex = $state<number | null>(null);
-  // Inline rename state for category names
   let editingNameIndex = $state<number | null>(null);
   let editingNameValue = $state('');
-  // Track which categories are expanded to show their subcategories
+  let editingSub = $state<{ catIndex: number; subIndex: number; value: string } | null>(null);
   let expandedCategories = $state(new Set<string>());
+  // Local selected account id for safe bind
+  let selectedAccountId = $state('');
+
+  // Keep the local select in sync with the global currentAccount
+  $effect(() => {
+    selectedAccountId = $currentAccount ? $currentAccount.id : '';
+  });
+
+  // When user changes the select, call selectAccount only if different
+  $effect(() => {
+    if (!selectedAccountId) return;
+    if ($currentAccount?.id !== selectedAccountId) {
+      selectAccount(selectedAccountId);
+    }
+  });
 
   // Function to handle index changes
   function handleIndexChange(currentIndex: number, newPosition: string) {
@@ -90,20 +121,17 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
   function startEditingName(index: number) {
     editingNameIndex = index;
     editingNameValue = items[index]?.name ?? '';
-    // focus will be attempted after DOM update via autofocus on input
   }
 
   function saveName(index: number) {
     if (editingNameIndex === null) return;
     items[index].name = editingNameValue;
-    // also keep id stable but name updated for saving
     editingNameIndex = null;
     editingNameValue = '';
   }
 
   function handleNameKeydown(event: KeyboardEvent, index: number) {
     if (event.key === 'Enter') {
-      // commit
       (event.target as HTMLInputElement).blur();
     } else if (event.key === 'Escape') {
       editingNameIndex = null;
@@ -127,13 +155,12 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
     } else {
       expandedCategories.add(categoryId);
     }
-    // Create new Set to trigger reactivity
-    expandedCategories = new Set(expandedCategories);
+  // Reassign to a new Set so Svelte notices the mutation and updates the UI
+  expandedCategories = new Set(expandedCategories);
   }
 
   // Handle nested-sub dnd consider/finalize for a specific category index
   function handleSubDndConsider(catIndex: number, e: CustomEvent) {
-    // We update the visual order immediately for better feedback
     const { items: newSubItems } = e.detail;
     items[catIndex].subItems = newSubItems;
     items[catIndex].subs = newSubItems.map(item => item.name);
@@ -148,18 +175,17 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
   // Reactive configuration for optimal UX that updates with items
   const dndConfig = $derived({
     items,
-    flipDurationMs: 250, // Smooth flip animation
-    morphDisabled: false, // Enable morphing for smoother transitions
+    flipDurationMs: 250,
+    morphDisabled: false,
     dropTargetStyle: { 
       outline: '2px solid #3b82f6', 
       outlineOffset: '2px',
       backgroundColor: 'rgba(59, 130, 246, 0.08)' 
     },
-    dragDisabled: editingIndex !== null, // Disable drag when editing index
+    dragDisabled: editingIndex !== null,
     zoneTabIndex: -1,
-    dropFromOthersDisabled: true, // Only allow internal reordering
+    dropFromOthersDisabled: true,
     transformDraggedElement: (element: HTMLElement | undefined, data: any) => {
-      // Custom transform for dragged element with null check
       if (!element) return;
       element.style.transform = 'rotate(2deg) scale(1.05)';
       element.style.boxShadow = '0 20px 40px rgba(0, 0, 0, 0.3), 0 0 0 3px rgba(59, 130, 246, 0.7)';
@@ -168,7 +194,7 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
       element.style.backdropFilter = 'blur(8px)';
       element.style.borderRadius = '12px';
     },
-    centreDraggedOnCursor: true // Center the drag image on cursor
+    centreDraggedOnCursor: true
   });
 
   // Enhanced event handlers with better state management
@@ -176,9 +202,8 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
     const { items: newItems, info } = e.detail;
     items = newItems;
     
-    // Track drag state for visual feedback
     if (info.source === SOURCES.KEYBOARD || info.source === SOURCES.POINTER) {
-      isDragActive = info.trigger === TRIGGERS.DRAG_STARTED;
+      isDragActive = info.trigger === TRIGGERS.DRAG_START;
     }
   }
 
@@ -187,26 +212,20 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
     items = newItems;
     isDragActive = false;
     
-    // Optional: Add haptic feedback for mobile devices
     if (navigator.vibrate && info.trigger === TRIGGERS.DROPPED_INTO_ZONE) {
-      navigator.vibrate(50); // Subtle vibration feedback
+      navigator.vibrate(50);
     }
   }
 
-
   // --- Enhanced Functions ---
   function remove(index: number) {
-    // Add smooth removal animation
     const itemToRemove = items[index];
-    
-    // Temporarily mark for removal animation
     const element = document.querySelector(`[data-category-id="${itemToRemove.id}"]`);
     if (element) {
       element.classList.add('removing');
-      
       setTimeout(() => {
         items = items.filter((_, i) => i !== index);
-      }, 200); // Allow animation to complete
+      }, 200);
     } else {
       items = items.filter((_, i) => i !== index);
     }
@@ -218,24 +237,42 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
     cat.subs = cat.subItems.map(item => item.name);
   }
 
+  function startEditingSub(catIndex: number, subIndex: number) {
+    editingSub = { catIndex, subIndex, value: items[catIndex]?.subItems?.[subIndex]?.name ?? '' };
+    // focus via autofocus on input after DOM update
+  }
+
+  function saveSubName(catIndex: number, subIndex: number) {
+    if (!editingSub) return;
+    const newName = editingSub.value.trim();
+    if (newName.length) {
+      items[catIndex].subItems[subIndex].name = newName;
+      items[catIndex].subs = items[catIndex].subItems.map(item => item.name);
+    }
+    editingSub = null;
+  }
+
+  function handleSubNameKeydown(event: KeyboardEvent, catIndex: number, subIndex: number) {
+    if (event.key === 'Enter') {
+      (event.target as HTMLInputElement).blur();
+    } else if (event.key === 'Escape') {
+      editingSub = null;
+    }
+  }
+
   function addSub(categoryIndex: number) {
     const cat = items[categoryIndex];
     const newSub = { id: `sub-${cat.id}-${Date.now()}`, name: 'New subcategory' };
     cat.subItems = cat.subItems || [];
     cat.subItems.push(newSub);
     cat.subs = cat.subItems.map(item => item.name);
-    // open the category so user sees the new sub
-    expandedCategories.add(cat.id);
-    expandedCategories = new Set(expandedCategories);
-    // Focus management: try to focus last sub item input after DOM updates
-    setTimeout(() => {
-      const el = document.querySelector(`[data-category-id="${cat.id}"] .subcategory-list .subcategory-item:last-child input`);
-      if (el) (el as HTMLInputElement).focus();
-    }, 50);
+  // ensure the category is opened so the new sub is visible
+  expandedCategories.add(cat.id);
+  // Reassign to trigger Svelte reactivity
+  expandedCategories = new Set(expandedCategories);
   }
 
   async function save() {
-    // Convert back to original Category format (remove our added properties)
     const categoriesToSave = items.map(({ id, originalIndex, subItems, ...category }) => category);
     await saveCategories(categoriesToSave);
     dispatch('save', items.map(c => c.name));
@@ -256,7 +293,7 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
   <div class="modal-content" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="dialog" aria-labelledby="modal-title" tabindex="0">
     <div class="modal-header">
       <h2 id="modal-title">Edit Categories</h2>
-      <button class="close-button" onclick={cancel} aria-label="Close modal">
+  <button class="close-button" onclick={cancel} aria-label="Close modal">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
           <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
@@ -264,6 +301,20 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
     </div>
 
     <div class="modal-body">
+      <!-- Account selector: show current account and allow switching -->
+      <div class="account-selector">
+        <label class="small muted">Account</label>
+          <div class="account-row">
+          <select
+            aria-label="Select account"
+            bind:value={selectedAccountId}
+          >
+            {#each $accounts as a}
+              <option value={a.id} selected={($currentAccount && a.id === $currentAccount.id)}>{a.name}</option>
+            {/each}
+          </select>
+        </div>
+      </div>
       <p class="instructions">
         {#if isDragActive}
           <span class="drag-active-hint">🎯 Drop to reorder • Release to place</span>
@@ -280,7 +331,7 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
         onconsider={handleDndConsider}
         onfinalize={handleDndFinalize}
       >
-        {#each items as cat, i (cat.id)} <!-- Use unique stable ID -->
+        {#each items as cat, i (cat.id)}
           <div animate:flip={{ duration: 250, easing: (t) => t * (2 - t) }}>
             <div 
               class="category-item" 
@@ -288,10 +339,9 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
               role="listitem"
               tabindex="-1"
             >
-              
               <!-- Enhanced Drag Handle -->
               <div class="drag-handle" aria-label="Drag to reorder" title="Drag to reorder" onclick={(e) => e.stopPropagation()}>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                   <path d="M8 5H11M8 12H11M8 19H11M13 5H16M13 12H16M13 19H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                 </svg>
               </div>
@@ -299,11 +349,12 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
               <!-- Category Info -->
               <div class="category-info">
                 <div class="category-icon" style="cursor:pointer;">
-                  <Icon name={cat.icon} size={28} color={cat.color} />
+                  <Icon name={cat.icon} size={24} color={cat.color} />
                 </div>
+                
                 {#if editingNameIndex === i}
                   <input
-                    class="category-name"
+                    class="category-name-input"
                     value={editingNameValue}
                     oninput={(e) => editingNameValue = e.target.value}
                     onblur={() => saveName(i)}
@@ -311,8 +362,21 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
                     autofocus
                   />
                 {:else}
-                  <div class="category-name" title="Category name">{cat.name}</div>
+                  <div class="category-name" title="Click to edit category name" onclick={() => startEditingName(i)}>{cat.name}</div>
                 {/if}
+                
+                <!-- Category Actions -->
+                <div class="category-inline-actions">
+                  <button 
+                    class="expand-toggle" 
+                    onclick={() => toggleCategoryExpansion(cat.id)}
+                    title={expandedCategories.has(cat.id) ? 'Collapse subcategories' : 'Expand subcategories'}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" class:rotated={expandedCategories.has(cat.id)}>
+                      <path d="M6 9L12 15L18 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </button>
+                </div>
                 
                 <!-- Editable Category Index -->
                 <div class="category-index-container">
@@ -360,19 +424,9 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
                   aria-label={`Rename category ${cat.name}`}
                   title="Rename"
                 >
-                  <!-- reuse Icon component if available -->
-                  <Icon name="pencil" />
-                </button>
-
-                <!-- Chevron expand/collapse button -->
-                <button
-                  class="action-button"
-                  onclick={(e) => { e.stopPropagation(); toggleCategoryExpansion(cat.id); }}
-                  aria-expanded={expandedCategories.has(cat.id)}
-                  aria-label={expandedCategories.has(cat.id) ? 'Collapse category' : 'Expand category'}
-                  title={expandedCategories.has(cat.id) ? 'Collapse' : 'Expand'}
-                >
-                  <Icon name={expandedCategories.has(cat.id) ? 'chevron-up' : 'chevron-down'} />
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+                    <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
                 </button>
               </div>
             </div>
@@ -391,8 +445,8 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
                       <div class="subcategory-item" role="listitem">
                         <div class="subcategory-content">
                           <!-- Subcategory Drag Handle -->
-                          <div class="subcategory-drag-handle" aria-label="Drag to reorder" title="Drag to reorder">
-                            <svg width="8" height="8" viewBox="0 0 24 24" fill="none">
+                          <div class="subcategory-drag-handle" aria-label="Drag subcategory" title="Drag subcategory" onclick={(e) => e.stopPropagation()}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
                               <path d="M8 5H11M8 12H11M8 19H11M13 5H16M13 12H16M13 19H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                             </svg>
                           </div>
@@ -402,7 +456,17 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="opacity: 0.7; margin-right: 8px;">
                               <path d="M9 6L15 12L9 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                             </svg>
-                            {sub.name}
+                            {#if editingSub && editingSub.catIndex === i && editingSub.subIndex === si}
+                              <input
+                                class="subcategory-input"
+                                bind:value={editingSub.value}
+                                onblur={() => saveSubName(i, si)}
+                                onkeydown={(e) => handleSubNameKeydown(e, i, si)}
+                                autofocus
+                              />
+                            {:else}
+                              <div onclick={() => startEditingSub(i, si)} style="cursor:text;">{sub.name}</div>
+                            {/if}
                           </div>
 
                           <!-- Delete Action -->
@@ -418,20 +482,27 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
                               </svg>
                             </button>
                           </div>
+                            <div>
+                              <button
+                                class="action-button"
+                                onclick={(e) => { e.stopPropagation(); startEditingName(si); }}
+                                aria-label={`Rename category ${sub.name}`}
+                                title="Rename"
+                              >
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+                                  <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                                </svg>
+                              </button>
+                          </div>
                         </div>
                       </div>
                     {/each}
                   </div>
                 {:else}
                   <div class="no-subcategories">
-                    <div style="display:flex;align-items:center;gap:0.6rem;">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style="opacity:0.6; margin-right:8px;">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" stroke="currentColor" stroke-width="1.2"/>
-                      </svg>
-                      <div>
-                        <div style="font-weight:600">No subcategories</div>
-                        <small>Tap "Add" to create a subcategory</small>
-                      </div>
+                    <div class="no-sub-inner">
+                      <div style="font-weight:600">No subcategories</div>
+                      <small>Add a new subcategory to this category</small>
                     </div>
                     <button class="add-sub" onclick={() => addSub(i)}>Add</button>
                   </div>
@@ -439,7 +510,7 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
               </div>
             {/if}
           </div>
-        {/each}
+  {/each}
         
         {#if items.length === 0}
           <div class="empty-state">
@@ -455,8 +526,8 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
     </div>
 
     <div class="modal-footer">
-      <button class="btn secondary" onclick={cancel}>Cancel</button>
-      <button class="btn primary" onclick={save}>Save Changes</button>
+  <button class="btn secondary" onclick={cancel}>Cancel</button>
+  <button class="btn primary" onclick={save}>Save Changes</button>
     </div>
   </div>
 </div>
@@ -467,60 +538,58 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
   .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.6);
+    background: rgba(0, 0, 0, 0.55);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 1000;
-    backdrop-filter: blur(6px);
+    backdrop-filter: blur(4px);
   }
 
   .modal-content {
-    background: rgba(15, 23, 42, 0.92);
-    border-radius: 18px;
-    width: 380px;
+    background: rgba(15, 23, 42, 0.98);
+    border-radius: 12px;
+    width: 420px;
     max-width: 95%;
-    box-shadow: 
-      0 30px 60px -15px rgba(0, 0, 0, 0.5),
-      0 0 0 1px rgba(59, 130, 246, 0.25),
-      0 0 0 2px rgba(30, 58, 138, 0.1);
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
     overflow: hidden;
-    border: 1px solid rgba(59, 130, 246, 0.15);
-    backdrop-filter: blur(16px);
+    border: 1px solid rgba(59, 130, 246, 0.14);
+    backdrop-filter: blur(12px);
     display: flex;
     flex-direction: column;
-    max-height: 90vh;
-    user-select: none; /* Prevent text selection during drag */
+    max-height: 86vh;
+    user-select: none;
   }
 
   .modal-header {
-    padding: 1.25rem 1.5rem; /* More padding */
-    border-bottom: 1px solid rgba(71, 85, 105, 0.25); /* Slightly more opaque */
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid rgba(71, 85, 105, 0.18);
     display: flex;
     justify-content: space-between;
     align-items: center;
+    background: rgba(15, 23, 42, 0.85);
   }
 
   .modal-header h2 {
     margin: 0;
-    color: #f1f5f9; /* Lighter text */
-    font-weight: 700; /* Bolder */
-    font-size: 1.3rem;
+    color: #f8fafc;
+    font-weight: 700;
+    font-size: 1.15rem;
     font-family: 'Inter', sans-serif;
-    letter-spacing: -0.02em; /* Slight negative tracking for crispness */
+    letter-spacing: -0.01em;
   }
 
   .close-button {
-    background: rgba(30, 41, 59, 0.6); /* Subtle background */
-    border: 1px solid rgba(71, 85, 105, 0.3);
+    background: rgba(30, 41, 59, 0.55);
+    border: 1px solid rgba(71, 85, 105, 0.22);
     color: #94a3b8;
     cursor: pointer;
-    font-size: 1rem;
-    transition: all 0.2s ease;
-    padding: 0.4rem;
-    border-radius: 8px; /* More rounded */
-    width: 36px;
-    height: 36px;
+    font-size: 0.95rem;
+    transition: all 0.15s ease;
+    padding: 0.2rem;
+    border-radius: 8px;
+    width: 32px;
+    height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -528,43 +597,45 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
 
   .close-button:hover, .close-button:focus {
     color: #f1f5f9;
-    background-color: rgba(239, 68, 68, 0.15); /* Red background on hover */
-    border-color: rgba(239, 68, 68, 0.3);
+    background-color: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.2);
     outline: none;
-    transform: translateY(-1px); /* Subtle lift */
-  }
-  .close-button:active {
-    transform: translateY(0);
+    transform: translateY(-1px);
   }
 
   .modal-body {
-    padding: 1.25rem 1.5rem;
+    padding: 1rem 1.25rem;
     overflow-y: auto;
     flex-grow: 1;
-    /* Enhance scrolling performance */
     scroll-behavior: smooth;
     overscroll-behavior: contain;
   }
-  
+
   .instructions {
-    color: #94a3b8;
+    color: #cbd5e1;
     font-size: 0.85rem;
-    margin-top: 0;
-    margin-bottom: 1rem;
+    margin: 0 0 1rem 0;
     text-align: center;
-    font-style: italic;
-    transition: all 0.3s ease;
-    min-height: 20px; /* Prevent layout shift */
+    font-weight: 500;
+    transition: all 0.2s ease;
+    min-height: 20px;
+    padding: 0.55rem;
+    background: rgba(59, 130, 246, 0.06);
+    border-radius: 8px;
+    border: 1px solid rgba(59, 130, 246, 0.12);
   }
+
+  .account-selector { margin-bottom: 0.75rem; display: flex; flex-direction: column; gap: 0.35rem; }
+  .account-row { display:flex; align-items:center; gap:0.6rem; }
+  .account-selector select { background: rgba(10,14,20,0.75); color: #e2e8f0; border: 1px solid rgba(59,130,246,0.12); padding: 0.4rem 0.6rem; border-radius: 8px; font-weight:600; }
 
   .drag-active-hint {
     color: #3b82f6;
     font-weight: 600;
-    font-style: normal;
     display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
-    animation: pulse 2s ease-in-out infinite;
+    gap: 0.4rem;
+    animation: pulse 2.2s ease-in-out infinite;
   }
 
   @keyframes pulse {
@@ -572,31 +643,24 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
     50% { opacity: 0.7; }
   }
 
-  /* Enhanced category list with modern CSS Grid for stability */
+  /* More compact category list */
   .category-list {
     list-style: none;
     padding: 0;
     margin: 0;
     position: relative;
-    transition: all 0.2s ease;
-    /* Use CSS Grid for more stable layouts during drag */
-    display: grid;
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
     gap: 0.5rem;
-    /* Contain layout shifts */
-    contain: layout style;
   }
 
   .category-list.drag-active {
-    /* Subtle visual feedback when drag is active */
-    background-color: rgba(59, 130, 246, 0.02);
-    border-radius: 12px;
+    background-color: rgba(59, 130, 246, 0.03);
+    border-radius: 10px;
     padding: 0.5rem;
     margin: -0.5rem;
-    transition: all 0.3s ease;
   }
 
-  /* Enhanced empty state */
   .empty-state {
     display: flex;
     flex-direction: column;
@@ -604,392 +668,166 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
     justify-content: center;
     color: #64748b;
     text-align: center;
-    padding: 3rem 1rem;
-    gap: 1rem;
-    background-color: rgba(30, 41, 59, 0.3);
-    border-radius: 12px;
-    border: 2px dashed rgba(71, 85, 105, 0.3);
+    padding: 2rem 0.75rem;
+    gap: 0.75rem;
+    background-color: rgba(30, 41, 59, 0.22);
+    border-radius: 10px;
+    border: 2px dashed rgba(71, 85, 105, 0.18);
   }
 
-  .empty-state .empty-icon {
-    color: #475569;
-    opacity: 0.7;
-  }
-
-  .empty-state p {
-    margin: 0;
-    font-size: 1.1rem;
-    font-weight: 500;
-    color: #94a3b8;
-  }
-
-  .empty-state small {
-    color: #64748b;
-    font-size: 0.85rem;
-  }
+  .empty-state p { font-size: 1rem; margin: 0; }
 
   .category-item {
     display: grid;
     grid-template-columns: auto 1fr auto;
     align-items: center;
-    gap: 0.6rem;
-    padding: 0.875rem 1rem;
-    border-radius: 12px;
+    gap: 0.75rem;
+    padding: 0.8rem 1rem;
+    border-radius: 10px;
     position: relative;
-    background: linear-gradient(135deg, 
-      rgba(30, 41, 59, 0.8) 0%, 
-      rgba(51, 65, 85, 0.6) 50%,
-      rgba(30, 41, 59, 0.8) 100%
-    );
-    border: 1px solid rgba(71, 85, 105, 0.3);
+    background: linear-gradient(180deg, rgba(15,23,42,0.9) 0%, rgba(15,23,42,0.82) 100%);
+    border: 1px solid rgba(59,130,246,0.06);
     cursor: grab;
-    
-    /* Modern glassmorphism effect */
-    backdrop-filter: blur(16px) saturate(180%);
-    box-shadow: 
-      0 4px 16px rgba(0, 0, 0, 0.1),
-      inset 0 1px 0 rgba(255, 255, 255, 0.05);
-    
-    /* Modern CSS for optimal performance */
-    contain: layout style paint;
-    will-change: transform, box-shadow, background-color;
-    
-    /* Advanced transitions using latest easing functions */
-    transition: 
-      transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
-      box-shadow 0.3s cubic-bezier(0.25, 0.8, 0.25, 1),
-      background 0.25s ease,
-      border-color 0.25s ease,
-      opacity 0.2s ease,
-      backdrop-filter 0.25s ease;
-
-    transform-style: preserve-3d;
+    backdrop-filter: blur(6px);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
   }
 
   .category-item:hover {
-    background: linear-gradient(135deg, 
-      rgba(59, 130, 246, 0.12) 0%, 
-      rgba(30, 41, 59, 0.9) 30%,
-      rgba(79, 70, 229, 0.08) 70%,
-      rgba(30, 41, 59, 0.9) 100%
-    );
-    border-color: rgba(59, 130, 246, 0.5);
-    transform: translateY(-3px) scale(1.02);
-    box-shadow: 
-      0 12px 32px rgba(0, 0, 0, 0.2),
-      0 4px 16px rgba(59, 130, 246, 0.15),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(20px) saturate(200%);
+    background: linear-gradient(180deg, rgba(17,24,39,0.95), rgba(14,21,36,0.9));
+    border-color: rgba(59, 130, 246, 0.22);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 28px rgba(2,6,23,0.45);
   }
 
-  .category-item:active {
-    cursor: grabbing;
-    transform: translateY(-1px) scale(1.03);
-    box-shadow: 
-      0 20px 40px rgba(0, 0, 0, 0.3),
-      0 8px 24px rgba(59, 130, 246, 0.2),
-      inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  }
-
-  /* Modern CSS for optimal drag handle UX */
   .drag-handle {
-    color: #64748b;
+    color: #94a3b8;
     cursor: grab;
-    padding: 0.5rem; /* larger touch target */
-    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    padding: 0.35rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 4px;
-    opacity: 0.3;
-    background: linear-gradient(135deg, 
-      rgba(71, 85, 105, 0.1) 0%, 
-      rgba(51, 65, 85, 0.05) 100%
-    );
-    border: 1px solid rgba(71, 85, 105, 0.08);
-    
-    /* Modern touch targets for accessibility */
+    border-radius: 6px;
+    opacity: 0.75;
+    background: rgba(30,41,59,0.22);
+    border: 1px solid rgba(59,130,246,0.08);
     min-width: 24px;
     min-height: 24px;
-    
-    /* Enhance for modern browsers */
-    contain: layout style;
-    transform-style: preserve-3d;
-    backdrop-filter: blur(3px);
+    font-size: 0.9rem;
   }
 
-  .drag-handle:hover {
-    color: #e2e8f0;
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.12) 0%, rgba(79, 70, 229, 0.06) 50%);
-    opacity: 0.9;
-    transform: none; /* remove large scaling for stability */
-    border-color: rgba(59, 130, 246, 0.4);
-    box-shadow: 
-      0 4px 12px rgba(59, 130, 246, 0.2),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(10px) saturate(140%);
-  }
+  .drag-handle:hover { opacity: 1; color: #e2e8f0; }
 
-  .category-item:active .drag-handle {
-    cursor: grabbing;
-    background: linear-gradient(135deg, 
-      rgba(59, 130, 246, 0.3) 0%, 
-      rgba(79, 70, 229, 0.2) 50%,
-      rgba(59, 130, 246, 0.15) 100%
-    );
-    color: #3b82f6;
-    transform: scale(1.05) translateZ(0);
-    box-shadow: 
-      0 6px 16px rgba(59, 130, 246, 0.25),
-      inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  }
-
-  /* Enhanced category info layout */
-  .category-info {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    overflow: hidden; /* Prevent text overflow issues */
-  }
+  .category-info { display: flex; align-items: center; gap: 0.75rem; overflow: hidden; flex: 1; }
 
   .category-icon {
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 44px;
-    height: 44px;
-    border-radius: 10px;
-    background: linear-gradient(135deg, 
-      rgba(59, 130, 246, 0.15) 0%, 
-      rgba(79, 70, 229, 0.08) 100%
-    );
-    border: 1px solid rgba(59, 130, 246, 0.2);
-    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-    backdrop-filter: blur(8px);
-    box-shadow: 
-      0 2px 8px rgba(0, 0, 0, 0.1),
-      inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  }
-
-  .category-item:hover .category-icon {
-    background: linear-gradient(135deg, 
-      rgba(59, 130, 246, 0.25) 0%, 
-      rgba(79, 70, 229, 0.15) 100%
-    );
-    border-color: rgba(59, 130, 246, 0.4);
-    transform: scale(1.1) rotateY(10deg);
-    box-shadow: 
-      0 4px 12px rgba(59, 130, 246, 0.2),
-      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, rgba(59,130,246,0.14), rgba(99,102,241,0.06));
+    border: 1px solid rgba(59,130,246,0.16);
+    transition: all 0.15s ease;
   }
 
   .category-name {
-    color: #f1f5f9;
-    font-size: 0.95rem;
+    color: #f8fafc;
+    font-size: 0.98rem;
     font-family: 'Inter', sans-serif;
-    font-weight: 500;
+    font-weight: 600;
     flex-grow: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow: visible;
+    text-overflow: unset;
+    white-space: normal;
+    line-height: 1.2;
     letter-spacing: -0.01em;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
   }
 
   .category-index {
-    color: #64748b;
-    font-size: 0.75rem;
+    color: #cbd5e1;
+    font-size: 0.78rem;
     font-weight: 600;
-    background: linear-gradient(135deg, 
-      rgba(71, 85, 105, 0.3) 0%, 
-      rgba(51, 65, 85, 0.2) 100%
-    );
-    padding: 0.25rem 0.4rem;
-    border-radius: 6px;
-    min-width: 24px;
+    background: rgba(71, 85, 105, 0.28);
+    padding: 0.28rem 0.45rem;
+    border-radius: 8px;
+    min-width: 28px;
     text-align: center;
-    font-family: 'Inter', monospace;
-    border: 1px solid rgba(71, 85, 105, 0.2);
+    border: 1px solid rgba(71, 85, 105, 0.18);
     cursor: pointer;
-    transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-    backdrop-filter: blur(6px);
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
-    box-shadow: 
-      0 1px 3px rgba(0, 0, 0, 0.08),
-      inset 0 1px 0 rgba(255, 255, 255, 0.03);
   }
 
-  .category-index:hover, .category-index:focus {
-    background: linear-gradient(135deg, 
-      rgba(59, 130, 246, 0.3) 0%, 
-      rgba(79, 70, 229, 0.2) 100%
-    );
-    color: #3b82f6;
-    border-color: rgba(59, 130, 246, 0.5);
-    outline: none;
-    transform: scale(1.1) translateY(-2px);
-    box-shadow: 
-      0 4px 12px rgba(59, 130, 246, 0.25),
-      inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  }
+  .category-index:hover, .category-index:focus { transform: scale(1.03); }
 
-  .category-index-container {
-    flex-shrink: 0;
-  }
+  .category-index-input { width: 42px; height: 28px; font-size: 0.85rem; }
 
-  .category-index-input {
-    width: 40px;
-    height: 28px;
-    background: linear-gradient(135deg, 
-      rgba(59, 130, 246, 0.2) 0%, 
-      rgba(79, 70, 229, 0.1) 100%
-    );
-    border: 2px solid #3b82f6;
-    border-radius: 6px;
-    color: #f1f5f9;
-    font-size: 0.75rem;
+  .category-name-input {
+    background: rgba(10,14,20,0.75);
+    border: 1px solid rgba(59, 130, 246, 0.42);
+    border-radius: 8px;
+    color: #f8fafc;
+    font-size: 0.98rem;
     font-weight: 600;
-    text-align: center;
-    font-family: 'Inter', monospace;
-    outline: none;
-    transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-    backdrop-filter: blur(10px);
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-    box-shadow: 
-      0 2px 8px rgba(59, 130, 246, 0.12),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    padding: 0.32rem 0.45rem;
+    width: 100%;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
   }
 
-  .category-index-input:focus {
-    background: linear-gradient(135deg, 
-      rgba(59, 130, 246, 0.3) 0%, 
-      rgba(79, 70, 229, 0.2) 100%
-    );
-    border-color: #2563eb;
-    box-shadow: 
-      0 0 0 4px rgba(59, 130, 246, 0.25),
-      0 8px 20px rgba(59, 130, 246, 0.2),
-      inset 0 1px 0 rgba(255, 255, 255, 0.15);
-    transform: scale(1.1) translateY(-2px);
-  }
+  .category-inline-actions { display: flex; align-items: center; gap: 0.4rem; }
 
-  .category-index-input::-webkit-outer-spin-button,
-  .category-index-input::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-  }
-
-  .category-index-input[type=number] {
-    -moz-appearance: textfield;
-    appearance: textfield;
-  }
-
-  .category-actions {
-    display: flex;
-    gap: 0.3rem;
-  }
+  .expand-toggle { width: 30px; height: 30px; padding: 0.25rem; color: #94a3b8; background: rgba(30,41,59,0.12); border: 1px solid rgba(71,85,105,0.08); border-radius: 8px; display:flex; align-items:center; justify-content:center; }
+  .expand-toggle:hover { color: #e2e8f0; background: rgba(59,130,246,0.08); border-color: rgba(59,130,246,0.14); }
 
   .action-button {
-    background: linear-gradient(135deg, 
-      rgba(51, 65, 85, 0.25) 0%, 
-      rgba(30, 41, 59, 0.15) 100%
-    );
-    border: 1px solid rgba(71, 85, 105, 0.15);
-    cursor: pointer;
-    color: #94a3b8;
-    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-    padding: 0.4rem;
+    background: linear-gradient(180deg, rgba(30,41,59,0.6), rgba(17,24,39,0.6));
+    border: 1px solid rgba(71, 85, 105, 0.12);
+    padding: 0.28rem;
     border-radius: 8px;
-    width: 32px;
-    height: 32px;
+    width: 34px;
+    height: 34px;
     display: flex;
     align-items: center;
     justify-content: center;
-    flex-shrink: 0;
-    backdrop-filter: blur(6px);
-    
-    /* Modern touch targets */
-    min-width: 32px;
-    min-height: 32px;
-    
-    box-shadow: 
-      0 1px 4px rgba(0, 0, 0, 0.08),
-      inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    font-size: 0.95rem;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
   }
 
-  .action-button:hover, .action-button:focus {
-    color: #f1f5f9;
-    background: linear-gradient(135deg, 
-      rgba(239, 68, 68, 0.2) 0%, 
-      rgba(220, 38, 38, 0.15) 100%
-    );
-    border-color: rgba(239, 68, 68, 0.4);
-    outline: none;
-    transform: translateY(-3px) scale(1.1);
-    box-shadow: 
-      0 6px 16px rgba(239, 68, 68, 0.25),
-      inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  }
-  
-  .action-button:active {
-    transform: translateY(0) scale(1.02);
+  .action-button:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(6,8,23,0.45); }
+
+  .delete { color: #ff7b7b; background: linear-gradient(180deg, rgba(248,113,113,0.06), rgba(248,113,113,0.02)); border-color: rgba(248,113,113,0.12); }
+
+  .delete:hover { background: rgba(239,68,68,0.12); color: #fff; box-shadow: 0 6px 18px rgba(239,68,68,0.18); }
+
+  /* Ensure SVG icons use currentColor so they follow the button color */
+  .action-button svg, .expand-toggle svg, .drag-handle svg, .category-icon svg {
+    width: 16px; height: 16px; display: block; color: inherit; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
   }
 
-  .delete {
-    color: #f87171;
-  }
+  /* Tweak chevron color specifically to match muted palette */
+  .expand-toggle svg { color: #475569; }
+  .expand-toggle:hover svg { color: #e2e8f0; }
 
-  .delete:hover, .delete:focus {
-    color: #ef4444;
-    background-color: rgba(239, 68, 68, 0.15);
-    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
-  }
-
-  /* Subcategory Styles */
   .subcategory-section {
-    margin-top: 0.5rem;
-    margin-left: 2.5rem;
-    border-left: 2px solid rgba(59, 130, 246, 0.3);
+    margin-top: 0.75rem;
+    margin-left: 2.25rem;
     padding-left: 1rem;
+    border-left: 2px solid rgba(59,130,246,0.14);
+    padding-bottom: 0.5rem;
   }
 
   .subcategory-list {
+    gap: 0.5rem;
+    margin-top: 0.4rem;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .no-subcategories {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    color: #94a3b8;
-    padding: 0.5rem 0.75rem;
-    border-radius: 8px;
-    background: rgba(30,41,59,0.4);
-    border: 1px dashed rgba(71,85,105,0.12);
-    margin-left: 0.25rem;
-    justify-content: space-between;
-  }
-
-  .no-subcategories .add-sub {
-    background: linear-gradient(135deg, #10b981, #059669);
-    color: white;
-    padding: 0.35rem 0.6rem;
-    border-radius: 8px;
-    border: none;
-    cursor: pointer;
-    font-weight: 600;
   }
 
   .subcategory-item {
-    display: flex;
-    align-items: center;
-    padding: 0.5rem;
+    padding: 0.55rem 0.8rem;
     border-radius: 8px;
-    background: rgba(30, 41, 59, 0.6);
-    border: 1px solid rgba(71, 85, 105, 0.2);
+    background: rgba(30, 41, 59, 0.5);
+    border: 1px solid rgba(71, 85, 105, 0.3);
     cursor: grab;
     transition: all 0.2s ease;
   }
@@ -1025,11 +863,22 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
   }
 
   .subcategory-name {
-    color: #cbd5e1;
-    font-size: 0.9rem;
+    color: #e2e8f0;
+    font-size: 0.92rem;
+    font-weight: 500;
     display: flex;
     align-items: center;
     flex-grow: 1;
+  }
+
+  .subcategory-input {
+    background: rgba(10,14,20,0.75);
+    border: 1px solid rgba(59,130,246,0.12);
+    color: #e2e8f0;
+    padding: 0.28rem 0.45rem;
+    border-radius: 6px;
+    font-weight: 600;
+    width: 100%;
   }
 
   .subcategory-actions {
@@ -1038,69 +887,40 @@ Notes   ▸ Modal overlays the page, traps focus, closes on Escape/click outside
   }
 
   .modal-footer {
-    padding: 1.25rem 1.5rem; /* More padding */
-    border-top: 1px solid rgba(71, 85, 105, 0.25);
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.85rem; /* Increased gap */
+    padding: 0.9rem 1rem;
+    gap: 0.6rem;
   }
 
   .btn {
-    padding: 0.6rem 1.25rem; /* More padding */
-    border-radius: 8px; /* More rounded */
-    cursor: pointer;
-    font-size: 0.95rem;
-    font-weight: 600; /* Bolder text */
-    transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1); /* Smoother */
-    border: 1px solid transparent;
-    font-family: 'Inter', sans-serif;
+    padding: 0.45rem 0.9rem;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-weight: 700;
   }
 
   .btn.secondary {
-    background-color: rgba(30, 41, 59, 0.7);
+    background-color: rgba(17,24,39,0.8);
     color: #cbd5e1;
-    border-color: rgba(71, 85, 105, 0.4);
+    border: 1px solid rgba(71,85,105,0.08);
   }
-
-  .btn.secondary:hover, .btn.secondary:focus {
-    background-color: rgba(30, 41, 59, 0.9);
-    border-color: rgba(59, 130, 246, 0.5);
-    color: #f1f5f9;
-    outline: none;
-    transform: translateY(-2px); /* More pronounced lift */
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
-  }
-  .btn.secondary:active {
-    transform: translateY(0);
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  .btn.secondary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 22px rgba(2,6,23,0.45);
   }
 
   .btn.primary {
-    background: linear-gradient(135deg, #3b82f6, #1d4ed8); /* Richer blue gradient */
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
     color: white;
-    border-color: transparent;
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); /* Subtle shadow */
+    box-shadow: 0 8px 26px rgba(59,130,246,0.18);
+    border: 1px solid rgba(37,99,235,0.08);
   }
-
-  .btn.primary:hover, .btn.primary:focus {
-    background: linear-gradient(135deg, #2563eb, #1e40af); /* Darker on hover */
+  .btn.primary:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4); /* Enhanced shadow */
-    outline: none;
-  }
-  .btn.primary:active {
-    transform: translateY(0);
-    box-shadow: 0 3px 8px rgba(59, 130, 246, 0.3);
+    box-shadow: 0 10px 30px rgba(37,99,235,0.22);
   }
 
-  @media (max-width: 400px) {
-    .modal-content {
-      width: 95%;
-      border-radius: 16px;
-    }
-    .modal-header, .modal-body, .modal-footer {
-      padding-left: 1rem;
-      padding-right: 1rem;
-    }
+  @media (max-width: 420px) {
+    .modal-content { width: 95%; border-radius: 12px; }
+    .modal-header, .modal-body, .modal-footer { padding-left: 0.75rem; padding-right: 0.75rem; }
   }
 </style>
